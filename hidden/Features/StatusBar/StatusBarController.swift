@@ -561,7 +561,7 @@ extension StatusBarController {
                     return
                 }
 
-                guard self.collapseMenuBarForSeparatePanel() else { return }
+                guard self.prepareExpandedMenuBarForNotchBridge() else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + SeparateBarTiming.showDelayAfterCollapse) { [weak self] in
                     guard let self = self else { return }
                     self.hiddenItemsCaptureShieldController.hide()
@@ -571,10 +571,15 @@ extension StatusBarController {
                         }
                         return
                     }
-                    let capture = self.captureByCoveringItemsStillVisibleInMenuBar(capture)
+                    guard let overflowCapture = self.captureByFilteringItemsOutsideRightMenuBar(capture) else {
+                        self.hiddenItemsBarController.hide()
+                        self.hiddenItemsSeparatorOverlayController.hide()
+                        self.autoCollapseIfNeeded()
+                        return
+                    }
 
-                    self.hiddenItemsBarController.show(capture: capture) { [weak self] sourceX in
-                        self?.activateHiddenItem(atSourceX: sourceX, from: capture)
+                    self.hiddenItemsBarController.show(capture: overflowCapture) { [weak self] sourceX in
+                        self?.activateHiddenItem(atSourceX: sourceX, from: overflowCapture)
                     }
                     self.hiddenItemsSeparatorOverlayController.hide()
                     if let button = self.btnExpandCollapse.button {
@@ -596,21 +601,51 @@ extension StatusBarController {
         return true
     }
 
-    private func collapseMenuBarForSeparatePanel() -> Bool {
+    private func prepareExpandedMenuBarForNotchBridge() -> Bool {
         hiddenItemsBarController.hide()
         guard self.isBtnSeparateValidPosition else {
             restoreInlineMenuBarAfterInvalidSeparatePosition()
             return false
         }
-        btnSeparate.length = btnHiddenCollapseLength
+        btnSeparate.length = btnHiddenLength
         if let button = btnExpandCollapse.button {
-            button.image = Assets.expandImage
+            button.image = Assets.collapseImage
         }
         if Preferences.useFullStatusBarOnExpandEnabled {
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
         }
         return true
+    }
+
+    private func captureByFilteringItemsOutsideRightMenuBar(_ capture: HiddenItemsBarCapture) -> HiddenItemsBarCapture? {
+        let rightArea: CGRect
+        if #available(macOS 12.0, *), let auxiliaryRightArea = capture.screen.auxiliaryTopRightArea {
+            rightArea = auxiliaryRightArea
+        } else {
+            let menuBarHeight = max(22, capture.screen.frame.maxY - capture.screen.visibleFrame.maxY)
+            rightArea = CGRect(
+                x: capture.screen.frame.midX,
+                y: capture.screen.frame.maxY - menuBarHeight,
+                width: capture.screen.frame.width / 2,
+                height: menuBarHeight
+            )
+        }
+
+        let tolerance: CGFloat = 2
+        let overflowItems = capture.items.filter { item in
+            item.sourceRect.minX < rightArea.minX - tolerance
+                || item.sourceRect.maxX > rightArea.maxX + tolerance
+        }
+        guard !overflowItems.isEmpty else { return nil }
+
+        return HiddenItemsBarCapture(
+            items: overflowItems,
+            screen: capture.screen,
+            separatorFrame: capture.separatorFrame,
+            menuBarOverlayFrame: .zero,
+            prefersDarkBackground: capture.prefersDarkBackground
+        )
     }
 
     private func restoreInlineMenuBarAfterInvalidSeparatePosition() {
