@@ -26,7 +26,7 @@ jobs:
           xattr -cr "build/DerivedData/Build/Products/Release/Hidden Bar.app"
           codesign --force --deep --sign - "build/DerivedData/Build/Products/Release/Hidden Bar.app"
           codesign --verify --deep --strict "build/DerivedData/Build/Products/Release/Hidden Bar.app"
-          ditto -c -k --keepParent \
+          ditto -c -k --norsrc --keepParent \
             "build/DerivedData/Build/Products/Release/Hidden Bar.app" \
             Hidden-Bar-notch-overflow.zip
       - uses: actions/upload-artifact@v4
