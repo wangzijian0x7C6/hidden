@@ -51,7 +51,7 @@ class PreferencesViewController: NSViewController {
     //MARK: - VC Life cycle
     override func viewDidLoad() {
         super.viewDidLoad()
-        checkBoxShowHiddenItemsInSeparateBar.title = "Show hidden items in separate bar".localized
+        checkBoxShowHiddenItemsInSeparateBar.title = "Show hidden items left of the notch".localized
         updateData()
         loadHotkey()
         createTutorialView()

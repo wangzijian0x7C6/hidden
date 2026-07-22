@@ -51,25 +51,16 @@ final class HiddenItemsBarPanelController: NSObject {
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
 
-        backgroundView.wantsLayer = true
-        backgroundView.layer?.backgroundColor = NSColor(
-            calibratedRed: 0.12,
-            green: 0.14,
-            blue: 0.21,
-            alpha: 0.94
-        ).cgColor
-        backgroundView.layer?.cornerRadius = 8
-        backgroundView.layer?.masksToBounds = true
         backgroundView.addSubview(scrollView)
 
         panel.contentView = backgroundView
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.hidesOnDeactivate = false
         panel.isMovable = false
         panel.isReleasedWhenClosed = false
-        panel.level = .statusBar
+        panel.level = .screenSaver
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.ignoresMouseEvents = false
     }
@@ -79,25 +70,46 @@ final class HiddenItemsBarPanelController: NSObject {
         contentView.configure(items: capture.items, clickHandler: clickHandler)
 
         let contentSize = contentView.preferredContentSize
-        let panelWidth = max(160, min(contentSize.width, capture.screen.visibleFrame.width - 16))
-        let needsHorizontalScroll = contentSize.width > panelWidth
-        let scrollerHeight = needsHorizontalScroll ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .overlay) : 0
-        let panelHeight = max(28, contentSize.height + scrollerHeight)
-        let screenFrame = capture.screen.frame
-        let visibleFrame = capture.screen.visibleFrame
-        let itemsMidX = capture.items.reduce(0) { $0 + $1.sourceRect.midX } / CGFloat(max(capture.items.count, 1))
-        let centeredX = itemsMidX - panelWidth / 2
-        let minX = screenFrame.minX + 8
-        let maxX = screenFrame.maxX - panelWidth - 8
-        let panelX = min(max(centeredX, minX), maxX)
-        let panelY = max(visibleFrame.maxY - panelHeight - 4, visibleFrame.minY + 8)
+        let menuBarArea = leftMenuBarArea(on: capture.screen)
+        let panelWidth = max(1, min(contentSize.width, menuBarArea.width))
+        let panelHeight = min(max(22, contentSize.height), menuBarArea.height)
+        let panelX = menuBarArea.maxX - panelWidth
+        let panelY = menuBarArea.midY - panelHeight / 2
 
-        contentView.frame = NSRect(origin: .zero, size: contentSize)
-        scrollView.hasHorizontalScroller = needsHorizontalScroll
+        contentView.frame = NSRect(
+            origin: .zero,
+            size: CGSize(width: max(contentSize.width, panelWidth), height: panelHeight)
+        )
+        scrollView.hasHorizontalScroller = false
         scrollView.frame = NSRect(origin: .zero, size: CGSize(width: panelWidth, height: panelHeight))
         backgroundView.frame = scrollView.frame
         panel.setFrame(NSRect(x: panelX, y: panelY, width: panelWidth, height: panelHeight), display: true)
+        scrollView.contentView.scroll(to: NSPoint(x: max(0, contentSize.width - panelWidth), y: 0))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
         panel.orderFrontRegardless()
+    }
+
+    private func leftMenuBarArea(on screen: NSScreen) -> CGRect {
+        let reservedForAppleAndAppMenu: CGFloat = 150
+        let trailingPadding: CGFloat = 8
+        let fallbackHeight = max(22, screen.frame.maxY - screen.visibleFrame.maxY)
+        let fallbackArea = CGRect(
+            x: screen.frame.minX + reservedForAppleAndAppMenu,
+            y: screen.frame.maxY - fallbackHeight,
+            width: max(1, screen.frame.width / 2 - reservedForAppleAndAppMenu - trailingPadding),
+            height: fallbackHeight
+        )
+
+        guard #available(macOS 12.0, *), let leftArea = screen.auxiliaryTopLeftArea else {
+            return fallbackArea
+        }
+
+        return CGRect(
+            x: leftArea.minX + reservedForAppleAndAppMenu,
+            y: leftArea.minY,
+            width: max(1, leftArea.width - reservedForAppleAndAppMenu - trailingPadding),
+            height: leftArea.height
+        )
     }
 
     func hide() {
@@ -257,20 +269,6 @@ final class HiddenItemsBarView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        let path = NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8)
-        panelBackgroundColor.setFill()
-        path.fill()
-
-        let strokeColor: NSColor
-        if #available(OSX 10.14, *) {
-            strokeColor = prefersDarkBackground ? NSColor.white.withAlphaComponent(0.28) : NSColor.separatorColor
-        } else {
-            strokeColor = NSColor.lightGray
-        }
-        strokeColor.withAlphaComponent(0.35).setStroke()
-        path.lineWidth = 1
-        path.stroke()
-
         guard !items.isEmpty else {
             drawEmptyState()
             return
@@ -322,9 +320,5 @@ final class HiddenItemsBarView: NSView {
             at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2),
             withAttributes: attributes
         )
-    }
-
-    private var panelBackgroundColor: NSColor {
-        return .clear
     }
 }

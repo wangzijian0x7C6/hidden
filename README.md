@@ -50,9 +50,9 @@ brew install --cask hiddenbar
 
 * `⌘` + drag to move the Hidden icons around in the menu bar.
 * Click the Arrow icon to hide menu bar items.
-* Enable "Show hidden items in separate bar" in Preferences to show
-  hidden menu bar items in a separate bar below the menu bar on the current
-  display. This mode captures the hidden menu bar item windows and forwards
+* Enable "Show hidden items left of the notch" in Preferences to mirror
+  hidden menu bar items into the unused menu bar area left of the camera notch.
+  This mode captures the hidden menu bar item windows and forwards
   clicks back to the original items, so macOS may ask for Screen Recording and
   Accessibility permission.
 

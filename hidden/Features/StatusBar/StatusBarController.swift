@@ -576,11 +576,7 @@ extension StatusBarController {
                     self.hiddenItemsBarController.show(capture: capture) { [weak self] sourceX in
                         self?.activateHiddenItem(atSourceX: sourceX, from: capture)
                     }
-                    self.hiddenItemsSeparatorOverlayController.show(
-                        frame: capture.menuBarOverlayFrame,
-                        separatorFrame: capture.separatorFrame,
-                        prefersDarkBackground: capture.prefersDarkBackground
-                    )
+                    self.hiddenItemsSeparatorOverlayController.hide()
                     if let button = self.btnExpandCollapse.button {
                         button.image = Assets.collapseImage
                     }
@@ -611,8 +607,8 @@ extension StatusBarController {
             button.image = Assets.expandImage
         }
         if Preferences.useFullStatusBarOnExpandEnabled {
-            NSApp.setActivationPolicy(.accessory)
-            NSApp.deactivate()
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
         }
         return true
     }
