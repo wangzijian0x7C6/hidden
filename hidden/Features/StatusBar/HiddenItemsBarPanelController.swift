@@ -23,7 +23,7 @@ struct HiddenItemsBarItem {
 
 final class HiddenItemsBarPanelController: NSObject {
     private let panel: NSPanel
-    private let backgroundView: NSVisualEffectView
+    private let backgroundView: NSView
     private let scrollView: NSScrollView
     private let contentView: HiddenItemsBarView
 
@@ -33,7 +33,7 @@ final class HiddenItemsBarPanelController: NSObject {
 
     override init() {
         contentView = HiddenItemsBarView(frame: .zero)
-        backgroundView = NSVisualEffectView(frame: .zero)
+        backgroundView = NSView(frame: .zero)
         scrollView = NSScrollView(frame: .zero)
         panel = NSPanel(
             contentRect: .zero,
@@ -51,10 +51,13 @@ final class HiddenItemsBarPanelController: NSObject {
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
 
-        backgroundView.material = .popover
-        backgroundView.blendingMode = .behindWindow
-        backgroundView.state = .active
         backgroundView.wantsLayer = true
+        backgroundView.layer?.backgroundColor = NSColor(
+            calibratedRed: 0.12,
+            green: 0.14,
+            blue: 0.21,
+            alpha: 0.94
+        ).cgColor
         backgroundView.layer?.cornerRadius = 8
         backgroundView.layer?.masksToBounds = true
         backgroundView.addSubview(scrollView)
@@ -104,10 +107,8 @@ final class HiddenItemsBarPanelController: NSObject {
 
 final class HiddenItemsBarCaptureShieldController: NSObject {
     private let panel: NSPanel
-    private let backgroundView: NSVisualEffectView
 
     override init() {
-        backgroundView = NSVisualEffectView(frame: .zero)
         panel = NSPanel(
             contentRect: .zero,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -116,10 +117,6 @@ final class HiddenItemsBarCaptureShieldController: NSObject {
         )
         super.init()
 
-        backgroundView.material = .menu
-        backgroundView.blendingMode = .behindWindow
-        backgroundView.state = .active
-        panel.contentView = backgroundView
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
@@ -132,33 +129,10 @@ final class HiddenItemsBarCaptureShieldController: NSObject {
     }
 
     func show(on screen: NSScreen, near expandCollapseFrame: CGRect, covering hiddenSectionFrame: CGRect?) {
-        let menuBarHeight = max(22, screen.frame.maxY - screen.visibleFrame.maxY)
-        let shieldPadding: CGFloat = 12
-        let fallbackWidth: CGFloat = 360
-        let shieldFrame: CGRect
-
-        if Constant.isUsingLTRLanguage {
-            let minX = max(screen.frame.minX, hiddenSectionFrame?.minX ?? expandCollapseFrame.minX - fallbackWidth)
-            shieldFrame = CGRect(
-                x: minX,
-                y: screen.frame.maxY - menuBarHeight,
-                width: max(0, expandCollapseFrame.minX - minX + shieldPadding),
-                height: menuBarHeight
-            )
-        } else {
-            let maxX = min(screen.frame.maxX, hiddenSectionFrame?.maxX ?? expandCollapseFrame.maxX + fallbackWidth)
-            shieldFrame = CGRect(
-                x: expandCollapseFrame.maxX - shieldPadding,
-                y: screen.frame.maxY - menuBarHeight,
-                width: max(0, maxX - expandCollapseFrame.maxX + shieldPadding),
-                height: menuBarHeight
-            )
-        }
-
-        guard shieldFrame.width > 1 && shieldFrame.height > 1 else { return }
-        backgroundView.frame = NSRect(origin: .zero, size: shieldFrame.size)
-        panel.setFrame(shieldFrame, display: true)
-        panel.orderFrontRegardless()
+        // A visible shield hides the short capture transition, but it also causes
+        // a distracting dark flash on modern translucent menu bars. Prefer the
+        // brief native item transition over covering the menu bar with a panel.
+        panel.orderOut(nil)
     }
 
     func hide() {
