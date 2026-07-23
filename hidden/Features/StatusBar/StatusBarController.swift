@@ -770,10 +770,15 @@ extension StatusBarController {
             } else {
                 if accessibilityItems == nil {
                     accessibilityItems = accessibilityMenuBarItems()
+                    notchDebug("capture accessibilityFrames=\(accessibilityItems?.map { NSStringFromRect($0.frame) } ?? [])")
                 }
                 guard let match = accessibilityItems?.first(where: {
                     hypot($0.frame.midX - quartzRect.midX, $0.frame.midY - quartzRect.midY) <= 2
                 }) else {
+                    let nearestDistance = accessibilityItems?.map {
+                        hypot($0.frame.midX - quartzRect.midX, $0.frame.midY - quartzRect.midY)
+                    }.min() ?? -1
+                    notchDebug("capture accessibilityMiss window=\(NSStringFromRect(quartzRect)) nearestDistance=\(nearestDistance)")
                     return nil
                 }
                 image = match.icon.copy() as? NSImage ?? match.icon
