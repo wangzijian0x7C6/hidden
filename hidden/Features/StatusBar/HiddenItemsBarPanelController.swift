@@ -7,6 +7,20 @@
 
 import AppKit
 
+private let notchDebugLogURL = URL(fileURLWithPath: "/tmp/hidden-notch-6F2C.log")
+
+func notchDebug(_ message: String) {
+    let line = "\(Date().timeIntervalSince1970) [DEBUG-NOTCH-6F2C] \(message)\n"
+    guard let data = line.data(using: .utf8) else { return }
+    if !FileManager.default.fileExists(atPath: notchDebugLogURL.path) {
+        FileManager.default.createFile(atPath: notchDebugLogURL.path, contents: nil)
+    }
+    guard let handle = try? FileHandle(forWritingTo: notchDebugLogURL) else { return }
+    handle.seekToEndOfFile()
+    handle.write(data)
+    handle.closeFile()
+}
+
 struct HiddenItemsBarCapture {
     let items: [HiddenItemsBarItem]
     let screen: NSScreen
@@ -88,8 +102,8 @@ final class HiddenItemsBarPanelController: NSObject {
         scrollView.contentView.scroll(to: NSPoint(x: max(0, contentSize.width - panelWidth), y: 0))
         scrollView.reflectScrolledClipView(scrollView.contentView)
         panel.orderFrontRegardless()
-        NSLog(
-            "[DEBUG-NOTCH-6F2C] show itemCount=\(capture.items.count) leftArea=\(NSStringFromRect(menuBarArea)) contentSize=\(NSStringFromSize(contentSize)) panel=\(NSStringFromRect(panelFrame)) visible=\(panel.isVisible)"
+        notchDebug(
+            "show itemCount=\(capture.items.count) leftArea=\(NSStringFromRect(menuBarArea)) contentSize=\(NSStringFromSize(contentSize)) panel=\(NSStringFromRect(panelFrame)) visible=\(panel.isVisible)"
         )
     }
 

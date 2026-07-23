@@ -516,16 +516,27 @@ extension StatusBarController {
     }
 
     private func expandHiddenItemsBar() {
-        guard self.isCollapsed else { return }
+        notchDebug(
+            "expand entry collapsed=\(isCollapsed) validPosition=\(isBtnSeparateValidPosition) preference=\(Preferences.showHiddenItemsInSeparateBar)"
+        )
+        guard self.isCollapsed else {
+            notchDebug("expand stop notCollapsed")
+            return
+        }
         guard self.isBtnSeparateValidPosition else {
+            notchDebug("expand stop invalidPosition")
             restoreInlineMenuBarAfterInvalidSeparatePosition()
             return
         }
         guard self.canCaptureScreenForSeparatePanel() else {
+            notchDebug("expand stop noScreenCapture")
             self.expandMenubar()
             return
         }
-        guard let expandCollapseGeometry = currentExpandCollapseGeometry() else { return }
+        guard let expandCollapseGeometry = currentExpandCollapseGeometry() else {
+            notchDebug("expand stop noGeometry")
+            return
+        }
 
         timer?.invalidate()
         hiddenItemsCaptureShieldController.show(
@@ -556,12 +567,17 @@ extension StatusBarController {
                 }
 
                 guard let capture = self.captureExpandedHiddenItems() else {
+                    notchDebug("expand stop noCapture")
                     self.hiddenItemsCaptureShieldController.hide()
                     self.expandMenubar(force: true)
                     return
                 }
 
-                guard self.prepareExpandedMenuBarForNotchBridge() else { return }
+                notchDebug("expand captured items=\(capture.items.count)")
+                guard self.prepareExpandedMenuBarForNotchBridge() else {
+                    notchDebug("expand stop prepareFailed")
+                    return
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + SeparateBarTiming.showDelayAfterCollapse) { [weak self] in
                     guard let self = self else { return }
                     self.hiddenItemsCaptureShieldController.hide()
@@ -572,6 +588,7 @@ extension StatusBarController {
                         return
                     }
                     guard let overflowCapture = self.captureByFilteringItemsOutsideRightMenuBar(capture) else {
+                        notchDebug("expand stop noOverflow")
                         self.hiddenItemsBarController.hide()
                         self.hiddenItemsSeparatorOverlayController.hide()
                         self.autoCollapseIfNeeded()
@@ -632,15 +649,15 @@ extension StatusBarController {
             )
         }
 
-        NSLog(
-            "[DEBUG-NOTCH-6F2C] filter screen=\(NSStringFromRect(capture.screen.frame)) rightArea=\(NSStringFromRect(rightArea)) items=\(capture.items.map { NSStringFromRect($0.sourceRect) })"
+        notchDebug(
+            "filter screen=\(NSStringFromRect(capture.screen.frame)) rightArea=\(NSStringFromRect(rightArea)) items=\(capture.items.map { NSStringFromRect($0.sourceRect) })"
         )
         let tolerance: CGFloat = 2
         let overflowItems = capture.items.filter { item in
             item.sourceRect.minX < rightArea.minX - tolerance
                 || item.sourceRect.maxX > rightArea.maxX + tolerance
         }
-        NSLog("[DEBUG-NOTCH-6F2C] filter overflowCount=\(overflowItems.count)")
+        notchDebug("filter overflowCount=\(overflowItems.count)")
         guard !overflowItems.isEmpty else { return nil }
 
         return HiddenItemsBarCapture(
@@ -669,19 +686,30 @@ extension StatusBarController {
     }
 
     private func captureExpandedHiddenItems() -> HiddenItemsBarCapture? {
-        guard let windowList = menuBarWindowList() else { return nil }
+        guard let windowList = menuBarWindowList() else {
+            notchDebug("capture stop noWindowList")
+            return nil
+        }
+        notchDebug("capture windowCount=\(windowList.count)")
 
         for screen in preferredCaptureScreens() {
-            guard
-                let separatorQuartzRect = statusItemQuartzRect(named: "hiddenbar_separate", statusItem: btnSeparate, from: windowList, on: screen),
-                let expandCollapseQuartzRect = statusItemQuartzRect(named: "hiddenbar_expandcollapse", statusItem: btnExpandCollapse, from: windowList, on: screen)
-            else { continue }
+            guard let separatorQuartzRect = statusItemQuartzRect(named: "hiddenbar_separate", statusItem: btnSeparate, from: windowList, on: screen) else {
+                notchDebug("capture screen=\(NSStringFromRect(screen.frame)) missingSeparator")
+                continue
+            }
+            guard let expandCollapseQuartzRect = statusItemQuartzRect(named: "hiddenbar_expandcollapse", statusItem: btnExpandCollapse, from: windowList, on: screen) else {
+                notchDebug("capture screen=\(NSStringFromRect(screen.frame)) missingExpandCollapse")
+                continue
+            }
 
             let items = captureVisibleHiddenSectionItems(
                 from: windowList,
                 separatorQuartzRect: separatorQuartzRect,
                 expandCollapseQuartzRect: expandCollapseQuartzRect,
                 on: screen
+            )
+            notchDebug(
+                "capture screen=\(NSStringFromRect(screen.frame)) separator=\(NSStringFromRect(separatorQuartzRect)) expandCollapse=\(NSStringFromRect(expandCollapseQuartzRect)) items=\(items.count)"
             )
             if !items.isEmpty {
                 let separatorFrame = appKitRectFromQuartzRect(separatorQuartzRect, on: screen)
