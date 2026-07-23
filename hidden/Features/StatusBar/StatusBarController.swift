@@ -595,8 +595,8 @@ extension StatusBarController {
                         return
                     }
 
-                    self.hiddenItemsBarController.show(capture: overflowCapture) { [weak self] sourceX in
-                        self?.activateHiddenItem(atSourceX: sourceX, from: overflowCapture)
+                    self.hiddenItemsBarController.show(capture: overflowCapture) { [weak self] item in
+                        self?.activateHiddenItem(item, from: overflowCapture)
                     }
                     self.hiddenItemsSeparatorOverlayController.hide()
                     if let button = self.btnExpandCollapse.button {
@@ -743,26 +743,50 @@ extension StatusBarController {
     }
 
     private func captureVisibleHiddenSectionItems(from windowList: [[String: Any]], separatorQuartzRect: CGRect, expandCollapseQuartzRect: CGRect, on screen: NSScreen) -> [HiddenItemsBarItem] {
+        var accessibilityItems: [(element: AXUIElement, icon: NSImage, frame: CGRect)]?
         let capturedItems = windowList.compactMap { info -> (item: HiddenItemsBarItem, quartzRect: CGRect)? in
             guard
                 let windowNumber = info[kCGWindowNumber as String] as? Int,
-                let quartzRect = visibleMenuBarItemQuartzRect(from: info, on: screen),
-                let image = CGWindowListCreateImage(
-                    .null,
-                    [.optionIncludingWindow],
-                    CGWindowID(windowNumber),
-                    [.boundsIgnoreFraming, .bestResolution]
-                )
+                let quartzRect = visibleMenuBarItemQuartzRect(from: info, on: screen)
             else {
                 return nil
             }
 
             let appKitRect = appKitRectFromQuartzRect(quartzRect, on: screen)
+            let windowID = CGWindowID(exactly: windowNumber)
+            let windowImage = windowID.flatMap {
+                CGWindowListCreateImage(
+                    .null,
+                    [.optionIncludingWindow],
+                    $0,
+                    [.boundsIgnoreFraming, .bestResolution]
+                )
+            }
+            let image: NSImage
+            let accessibilityElement: AXUIElement?
+            if let windowImage = windowImage {
+                image = NSImage(cgImage: windowImage, size: appKitRect.size)
+                accessibilityElement = nil
+            } else {
+                if accessibilityItems == nil {
+                    accessibilityItems = accessibilityMenuBarItems()
+                }
+                guard let match = accessibilityItems?.first(where: {
+                    hypot($0.frame.midX - quartzRect.midX, $0.frame.midY - quartzRect.midY) <= 2
+                }) else {
+                    return nil
+                }
+                image = match.icon.copy() as? NSImage ?? match.icon
+                image.size = CGSize(width: min(max(quartzRect.width, 18), 24), height: min(max(quartzRect.height, 18), 24))
+                accessibilityElement = match.element
+            }
+
             return (
                 item: HiddenItemsBarItem(
-                    image: NSImage(cgImage: image, size: appKitRect.size),
+                    image: image,
                     sourceRect: appKitRect,
-                    windowNumber: windowNumber
+                    windowNumber: windowNumber,
+                    accessibilityElement: accessibilityElement
                 ),
                 quartzRect: quartzRect
             )
@@ -782,6 +806,72 @@ extension StatusBarController {
         }
 
         return []
+    }
+
+    private func accessibilityMenuBarItems() -> [(element: AXUIElement, icon: NSImage, frame: CGRect)] {
+        guard AXIsProcessTrusted() else { return [] }
+
+        return NSWorkspace.shared.runningApplications.flatMap { app -> [(AXUIElement, NSImage, CGRect)] in
+            guard
+                app.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+                let icon = app.icon
+            else {
+                return []
+            }
+
+            let axApp = AXUIElementCreateApplication(app.processIdentifier)
+            var extrasValue: AnyObject?
+            guard
+                AXUIElementCopyAttributeValue(axApp, "AXExtrasMenuBar" as CFString, &extrasValue) == .success,
+                let extras = extrasValue
+            else {
+                return []
+            }
+
+            var childrenValue: AnyObject?
+            guard
+                AXUIElementCopyAttributeValue(extras as! AXUIElement, kAXChildrenAttribute as CFString, &childrenValue) == .success,
+                let children = childrenValue as? [AXUIElement]
+            else {
+                return []
+            }
+
+            return children.compactMap { element -> (AXUIElement, NSImage, CGRect)? in
+                guard
+                    let position = accessibilityPoint(kAXPositionAttribute as CFString, of: element),
+                    let size = accessibilitySize(kAXSizeAttribute as CFString, of: element)
+                else {
+                    return nil
+                }
+                return (element, icon, CGRect(origin: position, size: size))
+            }
+        }
+    }
+
+    private func accessibilityPoint(_ attribute: CFString, of element: AXUIElement) -> CGPoint? {
+        var value: AnyObject?
+        guard
+            AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+            let rawValue = value,
+            CFGetTypeID(rawValue) == AXValueGetTypeID()
+        else {
+            return nil
+        }
+        var point = CGPoint.zero
+        return AXValueGetValue(rawValue as! AXValue, .cgPoint, &point) ? point : nil
+    }
+
+    private func accessibilitySize(_ attribute: CFString, of element: AXUIElement) -> CGSize? {
+        var value: AnyObject?
+        guard
+            AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+            let rawValue = value,
+            CFGetTypeID(rawValue) == AXValueGetTypeID()
+        else {
+            return nil
+        }
+        var size = CGSize.zero
+        return AXValueGetValue(rawValue as! AXValue, .cgSize, &size) ? size : nil
     }
 
     private func captureByCoveringItemsStillVisibleInMenuBar(_ capture: HiddenItemsBarCapture) -> HiddenItemsBarCapture {
@@ -1045,7 +1135,7 @@ extension StatusBarController {
         )
     }
 
-    private func activateHiddenItem(atSourceX sourceX: CGFloat, from capture: HiddenItemsBarCapture) {
+    private func activateHiddenItem(_ item: HiddenItemsBarItem, from capture: HiddenItemsBarCapture) {
         guard canForwardClicksToMenuBarItems() else { return }
 
         hiddenItemsBarController.hide()
@@ -1057,9 +1147,13 @@ extension StatusBarController {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
             guard let self = self else { return }
+            if let element = item.accessibilityElement {
+                AXUIElementPerformAction(element, kAXPressAction as CFString)
+                return
+            }
             let clickPoint = CGPoint(
-                x: sourceX,
-                y: capture.items.first(where: { $0.sourceRect.minX <= sourceX && sourceX <= $0.sourceRect.maxX })?.sourceRect.midY ?? capture.screen.frame.maxY - 12
+                x: item.sourceRect.midX,
+                y: item.sourceRect.midY
             )
             self.postClick(at: clickPoint)
         }

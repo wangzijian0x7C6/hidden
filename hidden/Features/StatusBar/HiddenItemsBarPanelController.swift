@@ -33,6 +33,7 @@ struct HiddenItemsBarItem {
     let image: NSImage
     let sourceRect: CGRect
     let windowNumber: Int
+    let accessibilityElement: AXUIElement?
 }
 
 final class HiddenItemsBarPanelController: NSObject {
@@ -79,7 +80,7 @@ final class HiddenItemsBarPanelController: NSObject {
         panel.ignoresMouseEvents = false
     }
 
-    func show(capture: HiddenItemsBarCapture, clickHandler: @escaping (CGFloat) -> Void) {
+    func show(capture: HiddenItemsBarCapture, clickHandler: @escaping (HiddenItemsBarItem) -> Void) {
         contentView.prefersDarkBackground = capture.prefersDarkBackground
         contentView.configure(items: capture.items, clickHandler: clickHandler)
 
@@ -264,7 +265,7 @@ final class HiddenItemsBarView: NSView {
 
     private var items: [HiddenItemsBarItem] = []
     private var itemRects: [CGRect] = []
-    private var clickHandler: ((CGFloat) -> Void)?
+    private var clickHandler: ((HiddenItemsBarItem) -> Void)?
     var prefersDarkBackground = false
 
     var preferredContentSize: CGSize {
@@ -277,7 +278,7 @@ final class HiddenItemsBarView: NSView {
         )
     }
 
-    func configure(items: [HiddenItemsBarItem], clickHandler: @escaping (CGFloat) -> Void) {
+    func configure(items: [HiddenItemsBarItem], clickHandler: @escaping (HiddenItemsBarItem) -> Void) {
         self.items = items
         itemRects = []
         self.clickHandler = clickHandler
@@ -305,7 +306,7 @@ final class HiddenItemsBarView: NSView {
         let location = convert(event.locationInWindow, from: nil)
         let rects = itemRects.isEmpty ? layoutItemRects() : itemRects
         guard let index = rects.firstIndex(where: { $0.contains(location) }) else { return }
-        clickHandler?(items[index].sourceRect.midX)
+        clickHandler?(items[index])
     }
 
     private func layoutItemRects() -> [CGRect] {
