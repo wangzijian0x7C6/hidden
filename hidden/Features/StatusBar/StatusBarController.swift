@@ -632,11 +632,15 @@ extension StatusBarController {
             )
         }
 
+        NSLog(
+            "[DEBUG-NOTCH-6F2C] filter screen=\(NSStringFromRect(capture.screen.frame)) rightArea=\(NSStringFromRect(rightArea)) items=\(capture.items.map { NSStringFromRect($0.sourceRect) })"
+        )
         let tolerance: CGFloat = 2
         let overflowItems = capture.items.filter { item in
             item.sourceRect.minX < rightArea.minX - tolerance
                 || item.sourceRect.maxX > rightArea.maxX + tolerance
         }
+        NSLog("[DEBUG-NOTCH-6F2C] filter overflowCount=\(overflowItems.count)")
         guard !overflowItems.isEmpty else { return nil }
 
         return HiddenItemsBarCapture(

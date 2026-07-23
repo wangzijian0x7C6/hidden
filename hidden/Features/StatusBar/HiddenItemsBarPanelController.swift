@@ -75,6 +75,7 @@ final class HiddenItemsBarPanelController: NSObject {
         let panelHeight = min(max(22, contentSize.height), menuBarArea.height)
         let panelX = menuBarArea.maxX - panelWidth
         let panelY = menuBarArea.midY - panelHeight / 2
+        let panelFrame = NSRect(x: panelX, y: panelY, width: panelWidth, height: panelHeight)
 
         contentView.frame = NSRect(
             origin: .zero,
@@ -83,10 +84,13 @@ final class HiddenItemsBarPanelController: NSObject {
         scrollView.hasHorizontalScroller = false
         scrollView.frame = NSRect(origin: .zero, size: CGSize(width: panelWidth, height: panelHeight))
         backgroundView.frame = scrollView.frame
-        panel.setFrame(NSRect(x: panelX, y: panelY, width: panelWidth, height: panelHeight), display: true)
+        panel.setFrame(panelFrame, display: true)
         scrollView.contentView.scroll(to: NSPoint(x: max(0, contentSize.width - panelWidth), y: 0))
         scrollView.reflectScrolledClipView(scrollView.contentView)
         panel.orderFrontRegardless()
+        NSLog(
+            "[DEBUG-NOTCH-6F2C] show itemCount=\(capture.items.count) leftArea=\(NSStringFromRect(menuBarArea)) contentSize=\(NSStringFromSize(contentSize)) panel=\(NSStringFromRect(panelFrame)) visible=\(panel.isVisible)"
+        )
     }
 
     private func leftMenuBarArea(on screen: NSScreen) -> CGRect {
