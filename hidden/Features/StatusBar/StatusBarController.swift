@@ -814,7 +814,12 @@ extension StatusBarController {
     }
 
     private func accessibilityMenuBarItems() -> [(element: AXUIElement, icon: NSImage, frame: CGRect)] {
-        guard AXIsProcessTrusted() else { return [] }
+        guard AXIsProcessTrusted() else {
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            AXIsProcessTrustedWithOptions(options)
+            notchDebug("capture accessibilityNotTrusted")
+            return []
+        }
 
         return NSWorkspace.shared.runningApplications.flatMap { app -> [(AXUIElement, NSImage, CGRect)] in
             guard
