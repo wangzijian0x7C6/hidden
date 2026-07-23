@@ -635,7 +635,6 @@ extension StatusBarController {
         let tolerance: CGFloat = 2
         let overflowItems = capture.items.filter { item in
             item.sourceRect.minX < rightArea.minX - tolerance
-                || item.sourceRect.maxX > rightArea.maxX + tolerance
         }
         guard !overflowItems.isEmpty else { return nil }
 
@@ -1018,10 +1017,6 @@ extension StatusBarController {
                 y: capture.items.first(where: { $0.sourceRect.minX <= sourceX && sourceX <= $0.sourceRect.maxX })?.sourceRect.midY ?? capture.screen.frame.maxY - 12
             )
             self.postClick(at: clickPoint)
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                self?.collapseMenuBar()
-            }
         }
     }
 
