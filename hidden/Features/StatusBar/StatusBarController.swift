@@ -635,6 +635,7 @@ extension StatusBarController {
         let tolerance: CGFloat = 2
         let overflowItems = capture.items.filter { item in
             item.sourceRect.minX < rightArea.minX - tolerance
+                || item.sourceRect.maxX > rightArea.maxX + tolerance
         }
         guard !overflowItems.isEmpty else { return nil }
 
