@@ -691,6 +691,18 @@ extension StatusBarController {
             return nil
         }
         notchDebug("capture windowCount=\(windowList.count)")
+        let statusWindowRects = windowList.compactMap { info -> String? in
+            guard
+                (info[kCGWindowLayer as String] as? Int) == 25,
+                let bounds = info[kCGWindowBounds as String] as? [String: Any],
+                let rect = rectFromWindowBounds(bounds)
+            else {
+                return nil
+            }
+            let onscreen = (info[kCGWindowIsOnscreen as String] as? Bool) ?? false
+            return "\(NSStringFromRect(rect)) onscreen=\(onscreen)"
+        }
+        notchDebug("capture statusWindows=\(statusWindowRects)")
 
         for screen in preferredCaptureScreens() {
             guard let separatorQuartzRect = statusItemQuartzRect(named: "hiddenbar_separate", statusItem: btnSeparate, from: windowList, on: screen) else {
