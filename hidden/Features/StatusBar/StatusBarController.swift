@@ -9,6 +9,27 @@
 import AppKit
 import ApplicationServices
 
+private typealias CGSConnectionID = Int32
+
+@_silgen_name("CGSMainConnectionID")
+private func CGSMainConnectionID() -> CGSConnectionID
+
+@_silgen_name("CGSGetWindowCount")
+private func CGSGetWindowCount(
+    _ connection: CGSConnectionID,
+    _ targetConnection: CGSConnectionID,
+    _ count: inout Int32
+) -> CGError
+
+@_silgen_name("CGSGetProcessMenuBarWindowList")
+private func CGSGetProcessMenuBarWindowList(
+    _ connection: CGSConnectionID,
+    _ targetConnection: CGSConnectionID,
+    _ capacity: Int32,
+    _ windows: UnsafeMutablePointer<CGWindowID>,
+    _ count: inout Int32
+) -> CGError
+
 class StatusBarController {
     private typealias AccessibilityMenuBarItem = (element: AXUIElement, icon: NSImage, frame: CGRect)
 
@@ -994,7 +1015,27 @@ extension StatusBarController {
     }
 
     private func menuBarWindowList() -> [[String: Any]]? {
-        CGWindowListCopyWindowInfo([.excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+        var count: Int32 = 0
+        let connection = CGSMainConnectionID()
+        guard CGSGetWindowCount(connection, 0, &count) == .success, count > 0 else {
+            return nil
+        }
+
+        var windowIDs = [CGWindowID](repeating: 0, count: Int(count))
+        guard CGSGetProcessMenuBarWindowList(connection, 0, count, &windowIDs, &count) == .success else {
+            return nil
+        }
+
+        var pointers = windowIDs[..<Int(count)].compactMap {
+            UnsafeRawPointer(bitPattern: UInt($0))
+        }
+        guard
+            !pointers.isEmpty,
+            let array = CFArrayCreate(nil, &pointers, pointers.count, nil)
+        else {
+            return nil
+        }
+        return CGWindowListCreateDescriptionFromArray(array) as? [[String: Any]]
     }
 
     private func visibleMenuBarItemQuartzRect(from info: [String: Any], on screen: NSScreen) -> CGRect? {
@@ -1180,25 +1221,15 @@ extension StatusBarController {
     private func activateHiddenItem(_ item: HiddenItemsBarItem, from capture: HiddenItemsBarCapture) {
         guard canForwardClicksToMenuBarItems() else { return }
 
-        hiddenItemsBarController.hide()
-        hiddenItemsSeparatorOverlayController.hide()
-        btnSeparate.length = btnHiddenLength
-        if let button = btnExpandCollapse.button {
-            button.image = Assets.collapseImage
+        if let element = item.accessibilityElement {
+            AXUIElementPerformAction(element, kAXPressAction as CFString)
+            return
         }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            guard let self = self else { return }
-            if let element = item.accessibilityElement {
-                AXUIElementPerformAction(element, kAXPressAction as CFString)
-                return
-            }
-            let clickPoint = CGPoint(
-                x: item.sourceRect.midX,
-                y: item.sourceRect.midY
-            )
-            self.postClick(at: clickPoint)
-        }
+        let clickPoint = CGPoint(
+            x: item.sourceRect.midX,
+            y: item.sourceRect.midY
+        )
+        postClick(at: clickPoint)
     }
 
     private func postClick(at appKitPoint: CGPoint) {
