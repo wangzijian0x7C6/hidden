@@ -780,14 +780,7 @@ extension StatusBarController {
 
             let appKitRect = appKitRectFromQuartzRect(quartzRect, on: screen)
             let windowID = CGWindowID(exactly: windowNumber)
-            let windowImage = windowID.flatMap {
-                CGWindowListCreateImage(
-                    .null,
-                    [.optionIncludingWindow],
-                    $0,
-                    [.boundsIgnoreFraming, .bestResolution]
-                )
-            }
+            let windowImage = windowID.flatMap { captureMenuBarWindow($0) }
             let image: NSImage
             let accessibilityElement: AXUIElement?
             if let windowImage = windowImage {
@@ -1036,6 +1029,18 @@ extension StatusBarController {
             return nil
         }
         return CGWindowListCreateDescriptionFromArray(array) as? [[String: Any]]
+    }
+
+    private func captureMenuBarWindow(_ windowID: CGWindowID) -> CGImage? {
+        var pointer = UnsafeRawPointer(bitPattern: UInt(windowID))
+        guard let array = CFArrayCreate(nil, &pointer, 1, nil) else {
+            return nil
+        }
+        return CGImage(
+            windowListFromArrayScreenBounds: .null,
+            windowArray: array,
+            imageOption: [.boundsIgnoreFraming, .bestResolution]
+        )
     }
 
     private func visibleMenuBarItemQuartzRect(from info: [String: Any], on screen: NSScreen) -> CGRect? {
