@@ -1026,7 +1026,7 @@ extension StatusBarController {
             return nil
         }
 
-        var pointers = windowIDs[..<Int(count)].compactMap {
+        var pointers: [UnsafeRawPointer?] = windowIDs[..<Int(count)].map {
             UnsafeRawPointer(bitPattern: UInt($0))
         }
         guard
