@@ -10,9 +10,13 @@ import AppKit
 import ApplicationServices
 
 class StatusBarController {
+    private typealias AccessibilityMenuBarItem = (element: AXUIElement, icon: NSImage, frame: CGRect)
 
     //MARK: - Variables
     private var timer:Timer? = nil
+    private let accessibilityScanQueue = DispatchQueue(label: "com.dwarvesv.hiddenbar.accessibility-scan", qos: .utility)
+    private var accessibilityMenuBarItemCache: [AccessibilityMenuBarItem]?
+    private var menuBarIconCache: [CFHashCode: NSImage] = [:]
 
     //MARK: - BarItems
 
@@ -119,6 +123,7 @@ class StatusBarController {
         setupAlwayHideStatusBar()
         setupConfigurationDragMonitor()
         setupHoverToExpandIfEnabled()
+        warmAccessibilityMenuBarItemCache()
         NotificationCenter.default.addObserver(self, selector: #selector(handleScreenParametersChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(handlePreferencesChanged), name: .prefsChanged, object: nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
@@ -743,7 +748,7 @@ extension StatusBarController {
     }
 
     private func captureVisibleHiddenSectionItems(from windowList: [[String: Any]], separatorQuartzRect: CGRect, expandCollapseQuartzRect: CGRect, on screen: NSScreen) -> [HiddenItemsBarItem] {
-        var accessibilityItems: [(element: AXUIElement, icon: NSImage, frame: CGRect)]?
+        var accessibilityItems: [AccessibilityMenuBarItem]?
         let capturedItems = windowList.compactMap { info -> (item: HiddenItemsBarItem, quartzRect: CGRect)? in
             guard
                 let windowNumber = info[kCGWindowNumber as String] as? Int,
@@ -767,13 +772,21 @@ extension StatusBarController {
             if let windowImage = windowImage {
                 image = NSImage(cgImage: windowImage, size: appKitRect.size)
                 accessibilityElement = nil
+                if accessibilityItems == nil {
+                    accessibilityItems = accessibilityMenuBarItems()
+                }
+                if let match = accessibilityItems?.first(where: {
+                    hypot($0.frame.midX - quartzRect.midX, $0.frame.midY - quartzRect.midY) <= 8
+                }) {
+                    menuBarIconCache[CFHash(match.element)] = image
+                }
             } else {
                 if accessibilityItems == nil {
                     accessibilityItems = accessibilityMenuBarItems()
                     notchDebug("capture accessibilityFrames=\(accessibilityItems?.map { NSStringFromRect($0.frame) } ?? [])")
                 }
                 guard let match = accessibilityItems?.first(where: {
-                    hypot($0.frame.midX - quartzRect.midX, $0.frame.midY - quartzRect.midY) <= 2
+                    hypot($0.frame.midX - quartzRect.midX, $0.frame.midY - quartzRect.midY) <= 8
                 }) else {
                     let nearestDistance = accessibilityItems?.map {
                         hypot($0.frame.midX - quartzRect.midX, $0.frame.midY - quartzRect.midY)
@@ -781,7 +794,7 @@ extension StatusBarController {
                     notchDebug("capture accessibilityMiss window=\(NSStringFromRect(quartzRect)) nearestDistance=\(nearestDistance)")
                     return nil
                 }
-                image = match.icon.copy() as? NSImage ?? match.icon
+                image = menuBarIconCache[CFHash(match.element)] ?? (match.icon.copy() as? NSImage ?? match.icon)
                 image.size = CGSize(width: min(max(quartzRect.width, 18), 24), height: min(max(quartzRect.height, 18), 24))
                 accessibilityElement = match.element
             }
@@ -813,7 +826,15 @@ extension StatusBarController {
         return []
     }
 
-    private func accessibilityMenuBarItems() -> [(element: AXUIElement, icon: NSImage, frame: CGRect)] {
+    private func warmAccessibilityMenuBarItemCache() {
+        guard AXIsProcessTrusted() else { return }
+        accessibilityScanQueue.async { [weak self] in
+            guard let self = self, self.accessibilityMenuBarItemCache == nil else { return }
+            self.accessibilityMenuBarItemCache = self.scanAccessibilityMenuBarItems()
+        }
+    }
+
+    private func accessibilityMenuBarItems() -> [AccessibilityMenuBarItem] {
         guard AXIsProcessTrusted() else {
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             AXIsProcessTrustedWithOptions(options)
@@ -821,7 +842,18 @@ extension StatusBarController {
             return []
         }
 
-        return NSWorkspace.shared.runningApplications.flatMap { app -> [(AXUIElement, NSImage, CGRect)] in
+        return accessibilityScanQueue.sync {
+            if let cached = accessibilityMenuBarItemCache {
+                return cached
+            }
+            let items = scanAccessibilityMenuBarItems()
+            accessibilityMenuBarItemCache = items
+            return items
+        }
+    }
+
+    private func scanAccessibilityMenuBarItems() -> [AccessibilityMenuBarItem] {
+        NSWorkspace.shared.runningApplications.flatMap { app -> [AccessibilityMenuBarItem] in
             guard
                 app.processIdentifier != ProcessInfo.processInfo.processIdentifier,
                 let icon = app.icon
