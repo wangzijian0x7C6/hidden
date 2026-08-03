@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import ApplicationServices
 
 private let notchDebugLogURL = URL(fileURLWithPath: "/tmp/hidden-notch-6F2C.log")
 
@@ -115,11 +116,15 @@ final class HiddenItemsBarPanelController: NSObject {
     private func leftMenuBarArea(on screen: NSScreen) -> CGRect {
         let reservedForAppleAndAppMenu: CGFloat = 150
         let trailingPadding: CGFloat = 8
+        let leadingEdge = max(
+            screen.frame.minX + reservedForAppleAndAppMenu,
+            (applicationMenuMaxX(on: screen) ?? screen.frame.minX) + trailingPadding
+        )
         let fallbackHeight = max(22, screen.frame.maxY - screen.visibleFrame.maxY)
         let fallbackArea = CGRect(
-            x: screen.frame.minX + reservedForAppleAndAppMenu,
+            x: leadingEdge,
             y: screen.frame.maxY - fallbackHeight,
-            width: max(1, screen.frame.width / 2 - reservedForAppleAndAppMenu - trailingPadding),
+            width: max(1, screen.frame.midX - leadingEdge - trailingPadding),
             height: fallbackHeight
         )
 
@@ -128,11 +133,66 @@ final class HiddenItemsBarPanelController: NSObject {
         }
 
         return CGRect(
-            x: leftArea.minX + reservedForAppleAndAppMenu,
+            x: leadingEdge,
             y: leftArea.minY,
-            width: max(1, leftArea.width - reservedForAppleAndAppMenu - trailingPadding),
+            width: max(1, leftArea.maxX - leadingEdge - trailingPadding),
             height: leftArea.height
         )
+    }
+
+    private func applicationMenuMaxX(on screen: NSScreen) -> CGFloat? {
+        guard AXIsProcessTrusted() else { return nil }
+
+        let referenceMaxY = NSScreen.main?.frame.maxY ?? screen.frame.maxY
+        let point = CGPoint(
+            x: screen.frame.minX,
+            y: referenceMaxY - screen.frame.maxY
+        )
+        var menuBar: AXUIElement?
+        guard
+            AXUIElementCopyElementAtPosition(
+                AXUIElementCreateSystemWide(),
+                Float(point.x),
+                Float(point.y),
+                &menuBar
+            ) == .success,
+            let menuBar
+        else {
+            return nil
+        }
+
+        var childrenValue: AnyObject?
+        guard
+            AXUIElementCopyAttributeValue(menuBar, kAXChildrenAttribute as CFString, &childrenValue) == .success,
+            let children = childrenValue as? [AXUIElement]
+        else {
+            return nil
+        }
+
+        return children.compactMap { child -> CGFloat? in
+            var positionValue: AnyObject?
+            var sizeValue: AnyObject?
+            guard
+                AXUIElementCopyAttributeValue(child, kAXPositionAttribute as CFString, &positionValue) == .success,
+                AXUIElementCopyAttributeValue(child, kAXSizeAttribute as CFString, &sizeValue) == .success,
+                let positionValue,
+                let sizeValue,
+                CFGetTypeID(positionValue) == AXValueGetTypeID(),
+                CFGetTypeID(sizeValue) == AXValueGetTypeID()
+            else {
+                return nil
+            }
+
+            var position = CGPoint.zero
+            var size = CGSize.zero
+            guard
+                AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+                AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
+            else {
+                return nil
+            }
+            return position.x + size.width
+        }.max()
     }
 
     func hide() {
