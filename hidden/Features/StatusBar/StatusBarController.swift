@@ -749,6 +749,7 @@ extension StatusBarController {
         let capturedItems = windowList.compactMap { info -> (item: HiddenItemsBarItem, quartzRect: CGRect)? in
             guard
                 let windowNumber = info[kCGWindowNumber as String] as? Int,
+                let sourcePID = (info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
                 let quartzRect = visibleMenuBarItemQuartzRect(from: info, on: screen)
             else {
                 return nil
@@ -788,6 +789,7 @@ extension StatusBarController {
                     image: image,
                     sourceRect: appKitRect,
                     windowNumber: windowNumber,
+                    sourcePID: sourcePID,
                     accessibilityElement: accessibilityElement
                 ),
                 quartzRect: quartzRect
@@ -1215,17 +1217,10 @@ extension StatusBarController {
         }
 
         let matchSource = item.accessibilityElement == nil ? "frameRematch" : "capture"
-        guard let element = item.accessibilityElement ?? accessibilityElement(for: item) else {
-            notchInteractionDebug(
-                "click noAXMatch windowID=\(item.windowNumber) sourceRect=\(NSStringFromRect(item.sourceRect)) screen=\(NSStringFromRect(capture.screen.frame)) cursorBefore=\(cursorBefore.map { NSStringFromPoint($0) } ?? "nil")"
-            )
-            return
-        }
-
-        var sourcePID: pid_t = 0
-        let pidResult = AXUIElementGetPid(element, &sourcePID)
-        let matchedPID = sourcePID
-        let matchedFrame: CGRect? = {
+        let element = item.accessibilityElement ?? accessibilityElement(for: item)
+        var matchedPID: pid_t = 0
+        let pidResult = element.map { AXUIElementGetPid($0, &matchedPID) }
+        let matchedFrame: CGRect? = element.flatMap { element in
             guard
                 let position = accessibilityPoint(kAXPositionAttribute as CFString, of: element),
                 let size = accessibilitySize(kAXSizeAttribute as CFString, of: element)
@@ -1233,21 +1228,72 @@ extension StatusBarController {
                 return nil
             }
             return CGRect(origin: position, size: size)
-        }()
+        }
         notchInteractionDebug(
-            "click begin windowID=\(item.windowNumber) sourceRect=\(NSStringFromRect(item.sourceRect)) screen=\(NSStringFromRect(capture.screen.frame)) axMatch=\(matchSource) axFrame=\(matchedFrame.map { NSStringFromRect($0) } ?? "nil") axPID=\(matchedPID) pidResult=\(pidResult.rawValue) cursorBefore=\(cursorBefore.map { NSStringFromPoint($0) } ?? "nil")"
+            "click begin windowID=\(item.windowNumber) ownerPID=\(item.sourcePID) sourceRect=\(NSStringFromRect(item.sourceRect)) screen=\(NSStringFromRect(capture.screen.frame)) axMatch=\(element == nil ? "none" : matchSource) axFrame=\(matchedFrame.map { NSStringFromRect($0) } ?? "nil") axPID=\(matchedPID) pidResult=\(pidResult.map { String($0.rawValue) } ?? "nil") cursorBefore=\(cursorBefore.map { NSStringFromPoint($0) } ?? "nil")"
         )
 
-        let pressResult = AXUIElementPerformAction(element, kAXPressAction as CFString)
+        let posted = postTargetedClick(to: item)
         let cursorImmediate = CGEvent(source: nil)?.location
         notchInteractionDebug(
-            "click pressReturned windowID=\(item.windowNumber) axPID=\(matchedPID) result=\(pressResult.rawValue) cursorImmediate=\(cursorImmediate.map { NSStringFromPoint($0) } ?? "nil")"
+            "click targetedEventsPosted windowID=\(item.windowNumber) ownerPID=\(item.sourcePID) posted=\(posted) cursorImmediate=\(cursorImmediate.map { NSStringFromPoint($0) } ?? "nil")"
         )
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             let cursorAfter = CGEvent(source: nil)?.location
             notchInteractionDebug(
-                "click after100ms windowID=\(item.windowNumber) axPID=\(matchedPID) result=\(pressResult.rawValue) cursor=\(cursorAfter.map { NSStringFromPoint($0) } ?? "nil")"
+                "click after100ms windowID=\(item.windowNumber) ownerPID=\(item.sourcePID) posted=\(posted) cursor=\(cursorAfter.map { NSStringFromPoint($0) } ?? "nil")"
             )
+        }
+    }
+
+    private func postTargetedClick(to item: HiddenItemsBarItem) -> Bool {
+        let source = CGEventSource(stateID: .hidSystemState)
+        source?.localEventsSuppressionInterval = 0
+        let currentRect = currentQuartzRect(forMenuBarWindow: item.windowNumber)
+            ?? quartzRectFromAppKitRect(item.sourceRect)
+        let clickPoint = CGPoint(x: currentRect.midX, y: currentRect.midY)
+        guard
+            let mouseDown = CGEvent(
+                mouseEventSource: source,
+                mouseType: .leftMouseDown,
+                mouseCursorPosition: clickPoint,
+                mouseButton: .left
+            ),
+            let mouseUp = CGEvent(
+                mouseEventSource: source,
+                mouseType: .leftMouseUp,
+                mouseCursorPosition: clickPoint,
+                mouseButton: .left
+            )
+        else {
+            notchInteractionDebug("click targetedEventCreationFailed windowID=\(item.windowNumber)")
+            return false
+        }
+
+        configureTargetedClickEvent(mouseDown, for: item, clickState: 1)
+        configureTargetedClickEvent(mouseUp, for: item, clickState: 0)
+        notchInteractionDebug(
+            "click targetedEventBegin windowID=\(item.windowNumber) ownerPID=\(item.sourcePID) currentRect=\(NSStringFromRect(currentRect)) clickPoint=\(NSStringFromPoint(clickPoint))"
+        )
+        mouseDown.postToPid(item.sourcePID)
+        mouseUp.postToPid(item.sourcePID)
+        return true
+    }
+
+    private func configureTargetedClickEvent(_ event: CGEvent, for item: HiddenItemsBarItem, clickState: Int64) {
+        let windowID = Int64(item.windowNumber)
+        event.setIntegerValueField(.eventTargetUnixProcessID, value: Int64(item.sourcePID))
+        event.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: windowID)
+        event.setIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent, value: windowID)
+        event.setIntegerValueField(.mouseEventClickState, value: clickState)
+    }
+
+    private func currentQuartzRect(forMenuBarWindow windowNumber: Int) -> CGRect? {
+        menuBarWindowList()?.first(where: { info in
+            (info[kCGWindowNumber as String] as? Int) == windowNumber
+        }).flatMap { info in
+            guard let bounds = info[kCGWindowBounds as String] as? [String: Any] else { return nil }
+            return rectFromWindowBounds(bounds)
         }
     }
 

@@ -46,6 +46,7 @@ struct HiddenItemsBarItem {
     let image: NSImage
     let sourceRect: CGRect
     let windowNumber: Int
+    let sourcePID: pid_t
     let accessibilityElement: AXUIElement?
 }
 
