@@ -1206,10 +1206,46 @@ extension StatusBarController {
     }
 
     private func activateHiddenItem(_ item: HiddenItemsBarItem, from capture: HiddenItemsBarCapture) {
-        guard canForwardClicksToMenuBarItems() else { return }
+        let cursorBefore = CGEvent(source: nil)?.location
+        guard canForwardClicksToMenuBarItems() else {
+            notchInteractionDebug(
+                "click denied windowID=\(item.windowNumber) sourceRect=\(NSStringFromRect(item.sourceRect)) cursorBefore=\(cursorBefore.map { NSStringFromPoint($0) } ?? "nil")"
+            )
+            return
+        }
 
-        if let element = item.accessibilityElement ?? accessibilityElement(for: item) {
-            AXUIElementPerformAction(element, kAXPressAction as CFString)
+        let matchSource = item.accessibilityElement == nil ? "frameRematch" : "capture"
+        guard let element = item.accessibilityElement ?? accessibilityElement(for: item) else {
+            notchInteractionDebug(
+                "click noAXMatch windowID=\(item.windowNumber) sourceRect=\(NSStringFromRect(item.sourceRect)) screen=\(NSStringFromRect(capture.screen.frame)) cursorBefore=\(cursorBefore.map { NSStringFromPoint($0) } ?? "nil")"
+            )
+            return
+        }
+
+        var sourcePID: pid_t = 0
+        let pidResult = AXUIElementGetPid(element, &sourcePID)
+        let matchedPID = sourcePID
+        let matchedFrame: CGRect? = {
+            guard
+                let position = accessibilityPoint(kAXPositionAttribute as CFString, of: element),
+                let size = accessibilitySize(kAXSizeAttribute as CFString, of: element)
+            else {
+                return nil
+            }
+            return CGRect(origin: position, size: size)
+        }()
+        notchInteractionDebug(
+            "click begin windowID=\(item.windowNumber) sourceRect=\(NSStringFromRect(item.sourceRect)) screen=\(NSStringFromRect(capture.screen.frame)) axMatch=\(matchSource) axFrame=\(matchedFrame.map { NSStringFromRect($0) } ?? "nil") axPID=\(matchedPID) pidResult=\(pidResult.rawValue) cursorBefore=\(cursorBefore.map { NSStringFromPoint($0) } ?? "nil")"
+        )
+
+        let pressResult = AXUIElementPerformAction(element, kAXPressAction as CFString)
+        notchInteractionDebug(
+            "click pressReturned windowID=\(item.windowNumber) axPID=\(matchedPID) result=\(pressResult.rawValue) cursorImmediate=\(CGEvent(source: nil)?.location.map { NSStringFromPoint($0) } ?? "nil")"
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            notchInteractionDebug(
+                "click after100ms windowID=\(item.windowNumber) axPID=\(matchedPID) result=\(pressResult.rawValue) cursor=\(CGEvent(source: nil)?.location.map { NSStringFromPoint($0) } ?? "nil")"
+            )
         }
     }
 
@@ -1221,6 +1257,9 @@ extension StatusBarController {
     }
 
     private func moveHiddenItem(_ item: HiddenItemsBarItem, relativeTo target: HiddenItemsBarItem, placeAfter: Bool) {
+        notchInteractionDebug(
+            "moveHiddenItem entered sourceWindowID=\(item.windowNumber) sourceRect=\(NSStringFromRect(item.sourceRect)) targetWindowID=\(target.windowNumber) targetRect=\(NSStringFromRect(target.sourceRect)) placeAfter=\(placeAfter)"
+        )
         guard canForwardClicksToMenuBarItems() else { return }
 
         let sourceRect = quartzRectFromAppKitRect(item.sourceRect)

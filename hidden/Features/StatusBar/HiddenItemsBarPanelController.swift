@@ -22,6 +22,18 @@ func notchDebug(_ message: String) {
     handle.closeFile()
 }
 
+func notchInteractionDebug(_ message: String) {
+    let line = "\(Date().timeIntervalSince1970) [DEBUG-NOTCH-CLICK-A91E] \(message)\n"
+    guard let data = line.data(using: .utf8) else { return }
+    if !FileManager.default.fileExists(atPath: notchDebugLogURL.path) {
+        FileManager.default.createFile(atPath: notchDebugLogURL.path, contents: nil)
+    }
+    guard let handle = try? FileHandle(forWritingTo: notchDebugLogURL) else { return }
+    handle.seekToEndOfFile()
+    handle.write(data)
+    handle.closeFile()
+}
+
 struct HiddenItemsBarCapture {
     let items: [HiddenItemsBarItem]
     let screen: NSScreen
@@ -379,6 +391,10 @@ final class HiddenItemsBarView: NSView {
         mouseDownIndex = rects.firstIndex { $0.contains(location) }
         mouseDownLocation = location
         isCommandDrag = event.modifierFlags.contains(.command)
+        let selectedWindow = mouseDownIndex.map { items[$0].windowNumber }
+        notchInteractionDebug(
+            "proxy mouseDown location=\(NSStringFromPoint(location)) index=\(mouseDownIndex.map { String($0) } ?? "nil") windowID=\(selectedWindow.map { String($0) } ?? "nil") command=\(isCommandDrag)"
+        )
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -386,17 +402,41 @@ final class HiddenItemsBarView: NSView {
             mouseDownIndex = nil
             isCommandDrag = false
         }
-        guard !items.isEmpty, let sourceIndex = mouseDownIndex else { return }
+        guard !items.isEmpty, let sourceIndex = mouseDownIndex else {
+            notchInteractionDebug("proxy mouseUp classification=ignored reason=noSource")
+            return
+        }
 
         let location = convert(event.locationInWindow, from: nil)
         let rects = itemRects.isEmpty ? layoutItemRects() : itemRects
-        guard let targetIndex = rects.firstIndex(where: { $0.contains(location) }) else { return }
+        let distance = hypot(location.x - mouseDownLocation.x, location.y - mouseDownLocation.y)
+        guard let targetIndex = rects.firstIndex(where: { $0.contains(location) }) else {
+            notchInteractionDebug(
+                "proxy mouseUp sourceIndex=\(sourceIndex) location=\(NSStringFromPoint(location)) distance=\(distance) command=\(isCommandDrag) classification=ignored reason=noTarget"
+            )
+            return
+        }
 
-        if isCommandDrag, hypot(location.x - mouseDownLocation.x, location.y - mouseDownLocation.y) > 5 {
-            guard targetIndex != sourceIndex else { return }
+        if isCommandDrag, distance > 5 {
+            guard targetIndex != sourceIndex else {
+                notchInteractionDebug(
+                    "proxy mouseUp sourceIndex=\(sourceIndex) targetIndex=\(targetIndex) distance=\(distance) command=true classification=ignored reason=sameDragTarget"
+                )
+                return
+            }
+            notchInteractionDebug(
+                "proxy mouseUp sourceIndex=\(sourceIndex) targetIndex=\(targetIndex) distance=\(distance) command=true classification=drag"
+            )
             dragHandler?(items[sourceIndex], items[targetIndex], location.x > rects[targetIndex].midX)
         } else if targetIndex == sourceIndex {
+            notchInteractionDebug(
+                "proxy mouseUp sourceIndex=\(sourceIndex) targetIndex=\(targetIndex) distance=\(distance) command=\(isCommandDrag) classification=click"
+            )
             clickHandler?(items[sourceIndex])
+        } else {
+            notchInteractionDebug(
+                "proxy mouseUp sourceIndex=\(sourceIndex) targetIndex=\(targetIndex) distance=\(distance) command=\(isCommandDrag) classification=ignored reason=differentTarget"
+            )
         }
     }
 
