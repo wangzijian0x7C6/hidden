@@ -1239,12 +1239,14 @@ extension StatusBarController {
         )
 
         let pressResult = AXUIElementPerformAction(element, kAXPressAction as CFString)
+        let cursorImmediate = CGEvent(source: nil)?.location
         notchInteractionDebug(
-            "click pressReturned windowID=\(item.windowNumber) axPID=\(matchedPID) result=\(pressResult.rawValue) cursorImmediate=\(CGEvent(source: nil)?.location.map { NSStringFromPoint($0) } ?? "nil")"
+            "click pressReturned windowID=\(item.windowNumber) axPID=\(matchedPID) result=\(pressResult.rawValue) cursorImmediate=\(cursorImmediate.map { NSStringFromPoint($0) } ?? "nil")"
         )
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            let cursorAfter = CGEvent(source: nil)?.location
             notchInteractionDebug(
-                "click after100ms windowID=\(item.windowNumber) axPID=\(matchedPID) result=\(pressResult.rawValue) cursor=\(CGEvent(source: nil)?.location.map { NSStringFromPoint($0) } ?? "nil")"
+                "click after100ms windowID=\(item.windowNumber) axPID=\(matchedPID) result=\(pressResult.rawValue) cursor=\(cursorAfter.map { NSStringFromPoint($0) } ?? "nil")"
             )
         }
     }
