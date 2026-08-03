@@ -559,13 +559,17 @@ extension StatusBarController {
             return
         }
 
+        if !AXIsProcessTrusted() {
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            AXIsProcessTrustedWithOptions(options)
+        }
         timer?.invalidate()
         warmAccessibilityMenuBarItemCache()
         btnSeparate.length = btnHiddenLength
         btnExpandCollapse.button?.image = Assets.collapseImage
 
-        // One run-loop turn lets AppKit lay out the expanded native items.
-        DispatchQueue.main.async { [weak self] in
+        // AppKit needs a short layout window after changing NSStatusItem.length.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
             guard let self = self else { return }
             guard Preferences.showHiddenItemsInSeparateBar else {
                 self.collapseMenuBar()
