@@ -80,9 +80,13 @@ final class HiddenItemsBarPanelController: NSObject {
         panel.ignoresMouseEvents = false
     }
 
-    func show(capture: HiddenItemsBarCapture, clickHandler: @escaping (HiddenItemsBarItem) -> Void) {
+    func show(
+        capture: HiddenItemsBarCapture,
+        clickHandler: @escaping (HiddenItemsBarItem) -> Void,
+        dragHandler: @escaping (HiddenItemsBarItem, HiddenItemsBarItem, Bool) -> Void
+    ) {
         contentView.prefersDarkBackground = capture.prefersDarkBackground
-        contentView.configure(items: capture.items, clickHandler: clickHandler)
+        contentView.configure(items: capture.items, clickHandler: clickHandler, dragHandler: dragHandler)
 
         let contentSize = contentView.preferredContentSize
         let menuBarArea = leftMenuBarArea(on: capture.screen)
@@ -266,6 +270,10 @@ final class HiddenItemsBarView: NSView {
     private var items: [HiddenItemsBarItem] = []
     private var itemRects: [CGRect] = []
     private var clickHandler: ((HiddenItemsBarItem) -> Void)?
+    private var dragHandler: ((HiddenItemsBarItem, HiddenItemsBarItem, Bool) -> Void)?
+    private var mouseDownIndex: Int?
+    private var mouseDownLocation = CGPoint.zero
+    private var isCommandDrag = false
     var prefersDarkBackground = false
 
     var preferredContentSize: CGSize {
@@ -278,10 +286,15 @@ final class HiddenItemsBarView: NSView {
         )
     }
 
-    func configure(items: [HiddenItemsBarItem], clickHandler: @escaping (HiddenItemsBarItem) -> Void) {
+    func configure(
+        items: [HiddenItemsBarItem],
+        clickHandler: @escaping (HiddenItemsBarItem) -> Void,
+        dragHandler: @escaping (HiddenItemsBarItem, HiddenItemsBarItem, Bool) -> Void
+    ) {
         self.items = items
         itemRects = []
         self.clickHandler = clickHandler
+        self.dragHandler = dragHandler
         needsDisplay = true
     }
 
@@ -300,13 +313,31 @@ final class HiddenItemsBarView: NSView {
         }
     }
 
+    override func mouseDown(with event: NSEvent) {
+        let location = convert(event.locationInWindow, from: nil)
+        let rects = itemRects.isEmpty ? layoutItemRects() : itemRects
+        mouseDownIndex = rects.firstIndex { $0.contains(location) }
+        mouseDownLocation = location
+        isCommandDrag = event.modifierFlags.contains(.command)
+    }
+
     override func mouseUp(with event: NSEvent) {
-        guard !items.isEmpty else { return }
+        defer {
+            mouseDownIndex = nil
+            isCommandDrag = false
+        }
+        guard !items.isEmpty, let sourceIndex = mouseDownIndex else { return }
 
         let location = convert(event.locationInWindow, from: nil)
         let rects = itemRects.isEmpty ? layoutItemRects() : itemRects
-        guard let index = rects.firstIndex(where: { $0.contains(location) }) else { return }
-        clickHandler?(items[index])
+        guard let targetIndex = rects.firstIndex(where: { $0.contains(location) }) else { return }
+
+        if isCommandDrag, hypot(location.x - mouseDownLocation.x, location.y - mouseDownLocation.y) > 5 {
+            guard targetIndex != sourceIndex else { return }
+            dragHandler?(items[sourceIndex], items[targetIndex], location.x > rects[targetIndex].midX)
+        } else if targetIndex == sourceIndex {
+            clickHandler?(items[sourceIndex])
+        }
     }
 
     private func layoutItemRects() -> [CGRect] {

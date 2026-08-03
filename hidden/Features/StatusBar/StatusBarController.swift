@@ -36,6 +36,7 @@ class StatusBarController {
     //MARK: - Variables
     private var timer:Timer? = nil
     private let accessibilityScanQueue = DispatchQueue(label: "com.dwarvesv.hiddenbar.accessibility-scan", qos: .utility)
+    private let accessibilityCacheLock = NSLock()
     private var accessibilityMenuBarItemCache: [AccessibilityMenuBarItem]?
     private var menuBarIconCache: [CFHashCode: NSImage] = [:]
 
@@ -535,12 +536,6 @@ extension StatusBarController {
 
 //MARK: - Separate hidden items bar
 extension StatusBarController {
-    private enum SeparateBarTiming {
-        static let shieldSettleDelay: DispatchTimeInterval = .milliseconds(40)
-        static let captureDelay: DispatchTimeInterval = .milliseconds(80)
-        static let showDelayAfterCollapse: DispatchTimeInterval = .milliseconds(160)
-    }
-
     private func expandHiddenItemsBar() {
         notchDebug(
             "expand entry collapsed=\(isCollapsed) validPosition=\(isBtnSeparateValidPosition) preference=\(Preferences.showHiddenItemsInSeparateBar)"
@@ -559,78 +554,55 @@ extension StatusBarController {
             self.expandMenubar()
             return
         }
-        guard let expandCollapseGeometry = currentExpandCollapseGeometry() else {
+        guard currentExpandCollapseGeometry() != nil else {
             notchDebug("expand stop noGeometry")
             return
         }
 
         timer?.invalidate()
-        hiddenItemsCaptureShieldController.show(
-            on: expandCollapseGeometry.screen,
-            near: expandCollapseGeometry.frame,
-            covering: btnSeparate.button?.window?.frame
-        )
+        warmAccessibilityMenuBarItemCache()
+        btnSeparate.length = btnHiddenLength
+        btnExpandCollapse.button?.image = Assets.collapseImage
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + SeparateBarTiming.shieldSettleDelay) { [weak self] in
+        // One run-loop turn lets AppKit lay out the expanded native items.
+        DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             guard Preferences.showHiddenItemsInSeparateBar else {
-                self.hiddenItemsCaptureShieldController.hide()
                 self.collapseMenuBar()
                 return
             }
 
-            self.btnSeparate.length = self.btnHiddenLength
-            if let button = self.btnExpandCollapse.button {
-                button.image = Assets.collapseImage
+            guard let capture = self.captureExpandedHiddenItems() else {
+                notchDebug("expand stop noCapture")
+                self.expandMenubar(force: true)
+                return
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + SeparateBarTiming.captureDelay) { [weak self] in
-                guard let self = self else { return }
-                guard Preferences.showHiddenItemsInSeparateBar else {
-                    self.hiddenItemsCaptureShieldController.hide()
-                    self.collapseMenuBar()
-                    return
-                }
-
-                guard let capture = self.captureExpandedHiddenItems() else {
-                    notchDebug("expand stop noCapture")
-                    self.hiddenItemsCaptureShieldController.hide()
-                    self.expandMenubar(force: true)
-                    return
-                }
-
-                notchDebug("expand captured items=\(capture.items.count)")
-                guard self.prepareExpandedMenuBarForNotchBridge() else {
-                    notchDebug("expand stop prepareFailed")
-                    return
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + SeparateBarTiming.showDelayAfterCollapse) { [weak self] in
-                    guard let self = self else { return }
-                    self.hiddenItemsCaptureShieldController.hide()
-                    guard Preferences.showHiddenItemsInSeparateBar && self.isBtnSeparateValidPosition else {
-                        if !self.isBtnSeparateValidPosition {
-                            self.restoreInlineMenuBarAfterInvalidSeparatePosition()
-                        }
-                        return
-                    }
-                    guard let overflowCapture = self.captureByFilteringItemsOutsideRightMenuBar(capture) else {
-                        notchDebug("expand stop noOverflow")
-                        self.hiddenItemsBarController.hide()
-                        self.hiddenItemsSeparatorOverlayController.hide()
-                        self.autoCollapseIfNeeded()
-                        return
-                    }
-
-                    self.hiddenItemsBarController.show(capture: overflowCapture) { [weak self] item in
-                        self?.activateHiddenItem(item, from: overflowCapture)
-                    }
-                    self.hiddenItemsSeparatorOverlayController.hide()
-                    if let button = self.btnExpandCollapse.button {
-                        button.image = Assets.collapseImage
-                    }
-                    self.autoCollapseIfNeeded()
-                }
+            notchDebug("expand captured items=\(capture.items.count)")
+            guard self.prepareExpandedMenuBarForNotchBridge() else {
+                notchDebug("expand stop prepareFailed")
+                return
             }
+            guard let overflowCapture = self.captureByFilteringItemsOutsideRightMenuBar(capture) else {
+                notchDebug("expand stop noOverflow")
+                self.hiddenItemsBarController.hide()
+                self.hiddenItemsSeparatorOverlayController.hide()
+                self.autoCollapseIfNeeded()
+                return
+            }
+
+            self.hiddenItemsBarController.show(
+                capture: overflowCapture,
+                clickHandler: { [weak self] item in
+                    self?.activateHiddenItem(item, from: overflowCapture)
+                },
+                dragHandler: { [weak self] item, target, placeAfter in
+                    self?.moveHiddenItem(item, relativeTo: target, placeAfter: placeAfter)
+                }
+            )
+            self.hiddenItemsSeparatorOverlayController.hide()
+            self.btnExpandCollapse.button?.image = Assets.collapseImage
+            self.autoCollapseIfNeeded()
         }
     }
 
@@ -769,7 +741,7 @@ extension StatusBarController {
     }
 
     private func captureVisibleHiddenSectionItems(from windowList: [[String: Any]], separatorQuartzRect: CGRect, expandCollapseQuartzRect: CGRect, on screen: NSScreen) -> [HiddenItemsBarItem] {
-        var accessibilityItems: [AccessibilityMenuBarItem]?
+        let accessibilityItems = cachedAccessibilityMenuBarItems()
         let capturedItems = windowList.compactMap { info -> (item: HiddenItemsBarItem, quartzRect: CGRect)? in
             guard
                 let windowNumber = info[kCGWindowNumber as String] as? Int,
@@ -785,24 +757,18 @@ extension StatusBarController {
             let accessibilityElement: AXUIElement?
             if let windowImage = windowImage {
                 image = NSImage(cgImage: windowImage, size: appKitRect.size)
-                accessibilityElement = nil
-                if accessibilityItems == nil {
-                    accessibilityItems = accessibilityMenuBarItems()
-                }
-                if let match = accessibilityItems?.first(where: {
+                let match = accessibilityItems.first(where: {
                     hypot($0.frame.midX - quartzRect.midX, $0.frame.midY - quartzRect.midY) <= 8
-                }) {
+                })
+                accessibilityElement = match?.element
+                if let match {
                     menuBarIconCache[CFHash(match.element)] = image
                 }
             } else {
-                if accessibilityItems == nil {
-                    accessibilityItems = accessibilityMenuBarItems()
-                    notchDebug("capture accessibilityFrames=\(accessibilityItems?.map { NSStringFromRect($0.frame) } ?? [])")
-                }
-                guard let match = accessibilityItems?.first(where: {
+                guard let match = accessibilityItems.first(where: {
                     hypot($0.frame.midX - quartzRect.midX, $0.frame.midY - quartzRect.midY) <= 8
                 }) else {
-                    let nearestDistance = accessibilityItems?.map {
+                    let nearestDistance = accessibilityItems.map {
                         hypot($0.frame.midX - quartzRect.midX, $0.frame.midY - quartzRect.midY)
                     }.min() ?? -1
                     notchDebug("capture accessibilityMiss window=\(NSStringFromRect(quartzRect)) nearestDistance=\(nearestDistance)")
@@ -843,9 +809,18 @@ extension StatusBarController {
     private func warmAccessibilityMenuBarItemCache() {
         guard AXIsProcessTrusted() else { return }
         accessibilityScanQueue.async { [weak self] in
-            guard let self = self, self.accessibilityMenuBarItemCache == nil else { return }
-            self.accessibilityMenuBarItemCache = self.scanAccessibilityMenuBarItems()
+            guard let self = self, self.cachedAccessibilityMenuBarItems().isEmpty else { return }
+            let items = self.scanAccessibilityMenuBarItems()
+            self.accessibilityCacheLock.lock()
+            self.accessibilityMenuBarItemCache = items
+            self.accessibilityCacheLock.unlock()
         }
+    }
+
+    private func cachedAccessibilityMenuBarItems() -> [AccessibilityMenuBarItem] {
+        accessibilityCacheLock.lock()
+        defer { accessibilityCacheLock.unlock() }
+        return accessibilityMenuBarItemCache ?? []
     }
 
     private func accessibilityMenuBarItems() -> [AccessibilityMenuBarItem] {
@@ -857,11 +832,14 @@ extension StatusBarController {
         }
 
         return accessibilityScanQueue.sync {
-            if let cached = accessibilityMenuBarItemCache {
+            let cached = cachedAccessibilityMenuBarItems()
+            if !cached.isEmpty {
                 return cached
             }
             let items = scanAccessibilityMenuBarItems()
+            accessibilityCacheLock.lock()
             accessibilityMenuBarItemCache = items
+            accessibilityCacheLock.unlock()
             return items
         }
     }
@@ -1226,27 +1204,51 @@ extension StatusBarController {
     private func activateHiddenItem(_ item: HiddenItemsBarItem, from capture: HiddenItemsBarCapture) {
         guard canForwardClicksToMenuBarItems() else { return }
 
-        if let element = item.accessibilityElement {
+        if let element = item.accessibilityElement ?? accessibilityElement(for: item) {
             AXUIElementPerformAction(element, kAXPressAction as CFString)
-            return
         }
-        let clickPoint = CGPoint(
-            x: item.sourceRect.midX,
-            y: item.sourceRect.midY
-        )
-        postClick(at: clickPoint)
     }
 
-    private func postClick(at appKitPoint: CGPoint) {
-        let referenceMaxY = NSScreen.main?.frame.maxY ?? appKitPoint.y
-        let eventPoint = CGPoint(x: appKitPoint.x, y: referenceMaxY - appKitPoint.y)
+    private func accessibilityElement(for item: HiddenItemsBarItem) -> AXUIElement? {
+        let sourceRect = quartzRectFromAppKitRect(item.sourceRect)
+        return accessibilityMenuBarItems().first {
+            hypot($0.frame.midX - sourceRect.midX, $0.frame.midY - sourceRect.midY) <= 8
+        }?.element
+    }
+
+    private func moveHiddenItem(_ item: HiddenItemsBarItem, relativeTo target: HiddenItemsBarItem, placeAfter: Bool) {
+        guard canForwardClicksToMenuBarItems() else { return }
+
+        let sourceRect = quartzRectFromAppKitRect(item.sourceRect)
+        let targetRect = quartzRectFromAppKitRect(target.sourceRect)
+        let destination = CGPoint(
+            x: targetRect.midX + (placeAfter ? targetRect.width / 4 : -targetRect.width / 4),
+            y: targetRect.midY
+        )
+        let eventSource = CGEventSource(stateID: .combinedSessionState)
         guard
-            let mouseDown = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: eventPoint, mouseButton: .left),
-            let mouseUp = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: eventPoint, mouseButton: .left)
+            let mouseDown = CGEvent(mouseEventSource: eventSource, mouseType: .leftMouseDown, mouseCursorPosition: CGPoint(x: sourceRect.midX, y: sourceRect.midY), mouseButton: .left),
+            let mouseDrag = CGEvent(mouseEventSource: eventSource, mouseType: .leftMouseDragged, mouseCursorPosition: destination, mouseButton: .left),
+            let mouseUp = CGEvent(mouseEventSource: eventSource, mouseType: .leftMouseUp, mouseCursorPosition: destination, mouseButton: .left),
+            let cursorLocation = CGEvent(source: nil)?.location
         else { return }
 
+        [mouseDown, mouseDrag, mouseUp].forEach { $0.flags = .maskCommand }
+        CGAssociateMouseAndMouseCursorPosition(0)
         mouseDown.post(tap: CGEventTapLocation.cghidEventTap)
-        mouseUp.post(tap: CGEventTapLocation.cghidEventTap)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+            mouseDrag.post(tap: CGEventTapLocation.cghidEventTap)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
+            mouseUp.post(tap: CGEventTapLocation.cghidEventTap)
+            CGWarpMouseCursorPosition(cursorLocation)
+            CGAssociateMouseAndMouseCursorPosition(1)
+            guard let self else { return }
+            self.btnSeparate.length = self.btnHiddenCollapseLength
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.expandHiddenItemsBar()
+            }
+        }
     }
 
     private func canForwardClicksToMenuBarItems() -> Bool {
