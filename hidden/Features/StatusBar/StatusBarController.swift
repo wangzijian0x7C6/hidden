@@ -114,6 +114,9 @@ class StatusBarController {
 
     private var hoverMonitor: Any?
     private var hoverDwellTimer: Timer?
+    private var isNativeMenuBarMutationInFlight = false
+    private var pendingNativeRestoreWorkItem: DispatchWorkItem?
+    private let menuBarItemWindowIDField = CGEventField(rawValue: 0x33)!
 
     // True while the pointer sits in any screen's menubar band (the strip between
     // visibleFrame.maxY and frame.maxY, which is the menubar's exact height there).
@@ -638,18 +641,7 @@ extension StatusBarController {
     }
 
     private func captureByFilteringItemsOutsideRightMenuBar(_ capture: HiddenItemsBarCapture) -> HiddenItemsBarCapture? {
-        let rightArea: CGRect
-        if #available(macOS 12.0, *), let auxiliaryRightArea = capture.screen.auxiliaryTopRightArea {
-            rightArea = auxiliaryRightArea
-        } else {
-            let menuBarHeight = max(22, capture.screen.frame.maxY - capture.screen.visibleFrame.maxY)
-            rightArea = CGRect(
-                x: capture.screen.frame.midX,
-                y: capture.screen.frame.maxY - menuBarHeight,
-                width: capture.screen.frame.width / 2,
-                height: menuBarHeight
-            )
-        }
+        let rightArea = rightMenuBarArea(on: capture.screen)
 
         notchDebug(
             "filter screen=\(NSStringFromRect(capture.screen.frame)) rightArea=\(NSStringFromRect(rightArea)) items=\(capture.items.map { NSStringFromRect($0.sourceRect) })"
@@ -1207,6 +1199,24 @@ extension StatusBarController {
         )
     }
 
+    private enum NativeMenuBarRelation {
+        case leftOf(windowNumber: Int)
+        case rightOf(windowNumber: Int)
+
+        var targetWindowNumber: Int {
+            switch self {
+            case .leftOf(let windowNumber), .rightOf(let windowNumber):
+                return windowNumber
+            }
+        }
+    }
+
+    private struct NativeMenuBarWindow {
+        let windowNumber: Int
+        let sourcePID: pid_t
+        let quartzRect: CGRect
+    }
+
     private func activateHiddenItem(_ item: HiddenItemsBarItem, from capture: HiddenItemsBarCapture) {
         let cursorBefore = CGEvent(source: nil)?.location
         guard canForwardClicksToMenuBarItems() else {
@@ -1215,42 +1225,283 @@ extension StatusBarController {
             )
             return
         }
-
-        let matchSource = item.accessibilityElement == nil ? "frameRematch" : "capture"
-        let element = item.accessibilityElement ?? accessibilityElement(for: item)
-        var matchedPID: pid_t = 0
-        let pidResult = element.map { AXUIElementGetPid($0, &matchedPID) }
-        let matchedFrame: CGRect? = element.flatMap { element in
-            guard
-                let position = accessibilityPoint(kAXPositionAttribute as CFString, of: element),
-                let size = accessibilitySize(kAXSizeAttribute as CFString, of: element)
-            else {
-                return nil
-            }
-            return CGRect(origin: position, size: size)
+        guard !isNativeMenuBarMutationInFlight else {
+            notchInteractionDebug("click busy windowID=\(item.windowNumber)")
+            return
         }
+
+        isNativeMenuBarMutationInFlight = true
+        pendingNativeRestoreWorkItem?.cancel()
+        hiddenItemsBarController.hide()
+
         notchInteractionDebug(
-            "click begin windowID=\(item.windowNumber) ownerPID=\(item.sourcePID) sourceRect=\(NSStringFromRect(item.sourceRect)) screen=\(NSStringFromRect(capture.screen.frame)) axMatch=\(element == nil ? "none" : matchSource) axFrame=\(matchedFrame.map { NSStringFromRect($0) } ?? "nil") axPID=\(matchedPID) pidResult=\(pidResult.map { String($0.rawValue) } ?? "nil") cursorBefore=\(cursorBefore.map { NSStringFromPoint($0) } ?? "nil")"
+            "click begin windowID=\(item.windowNumber) ownerPID=\(item.sourcePID) sourceRect=\(NSStringFromRect(item.sourceRect)) screen=\(NSStringFromRect(capture.screen.frame)) cursorBefore=\(cursorBefore.map { NSStringFromPoint($0) } ?? "nil")"
         )
 
-        let posted = postTargetedClick(to: item)
+        let cursorLocation = CGEvent(source: nil)?.location
+        CGAssociateMouseAndMouseCursorPosition(0)
+        defer {
+            if let cursorLocation {
+                CGWarpMouseCursorPosition(cursorLocation)
+            }
+            CGAssociateMouseAndMouseCursorPosition(1)
+        }
+
+        let initialRect = currentQuartzRect(forMenuBarWindow: item.windowNumber)
+            ?? quartzRectFromAppKitRect(item.sourceRect)
+        let alreadyVisible = isQuartzRectVisibleInRightMenuBar(initialRect, on: capture.screen)
+        var returnRelation = returnRelation(forWindowNumber: item.windowNumber)
+        var didTemporarilyMove = false
+
+        if !alreadyVisible {
+            guard let slot = visibleSlotRelation(on: capture.screen, excluding: item.windowNumber) else {
+                notchInteractionDebug("click noVisibleSlot windowID=\(item.windowNumber)")
+                finishNativeMenuBarMutation(refreshProxy: true)
+                return
+            }
+            if returnRelation == nil {
+                returnRelation = slot
+            }
+            notchInteractionDebug(
+                "click tempMove windowID=\(item.windowNumber) to=\(slot.targetWindowNumber) return=\(returnRelation?.targetWindowNumber ?? -1)"
+            )
+            guard moveNativeMenuBarWindow(
+                windowNumber: item.windowNumber,
+                ownerPID: item.sourcePID,
+                relation: slot,
+                timeout: 0.45
+            ) else {
+                notchInteractionDebug("click tempMoveFailed windowID=\(item.windowNumber)")
+                finishNativeMenuBarMutation(refreshProxy: true)
+                return
+            }
+            didTemporarilyMove = true
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.08))
+        }
+
+        let posted = postTargetedClick(windowNumber: item.windowNumber, ownerPID: item.sourcePID)
         let cursorImmediate = CGEvent(source: nil)?.location
         notchInteractionDebug(
-            "click targetedEventsPosted windowID=\(item.windowNumber) ownerPID=\(item.sourcePID) posted=\(posted) cursorImmediate=\(cursorImmediate.map { NSStringFromPoint($0) } ?? "nil")"
+            "click targetedEventsPosted windowID=\(item.windowNumber) ownerPID=\(item.sourcePID) posted=\(posted) moved=\(didTemporarilyMove) cursorImmediate=\(cursorImmediate.map { NSStringFromPoint($0) } ?? "nil")"
         )
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            let cursorAfter = CGEvent(source: nil)?.location
-            notchInteractionDebug(
-                "click after100ms windowID=\(item.windowNumber) ownerPID=\(item.sourcePID) posted=\(posted) cursor=\(cursorAfter.map { NSStringFromPoint($0) } ?? "nil")"
+
+        guard didTemporarilyMove, let returnRelation else {
+            finishNativeMenuBarMutation(refreshProxy: true)
+            return
+        }
+
+        scheduleNativeRestore(
+            windowNumber: item.windowNumber,
+            ownerPID: item.sourcePID,
+            relation: returnRelation,
+            screen: capture.screen
+        )
+    }
+
+    private func moveHiddenItem(_ item: HiddenItemsBarItem, relativeTo target: HiddenItemsBarItem, placeAfter: Bool) {
+        notchInteractionDebug(
+            "moveHiddenItem entered sourceWindowID=\(item.windowNumber) sourceRect=\(NSStringFromRect(item.sourceRect)) targetWindowID=\(target.windowNumber) targetRect=\(NSStringFromRect(target.sourceRect)) placeAfter=\(placeAfter)"
+        )
+        guard canForwardClicksToMenuBarItems() else { return }
+        guard !isNativeMenuBarMutationInFlight else {
+            notchInteractionDebug("moveHiddenItem busy")
+            return
+        }
+        guard item.windowNumber != target.windowNumber else { return }
+
+        isNativeMenuBarMutationInFlight = true
+        pendingNativeRestoreWorkItem?.cancel()
+        hiddenItemsBarController.hide()
+
+        let cursorLocation = CGEvent(source: nil)?.location
+        CGAssociateMouseAndMouseCursorPosition(0)
+        defer {
+            if let cursorLocation {
+                CGWarpMouseCursorPosition(cursorLocation)
+            }
+            CGAssociateMouseAndMouseCursorPosition(1)
+        }
+
+        let relation: NativeMenuBarRelation = placeAfter
+            ? .rightOf(windowNumber: target.windowNumber)
+            : .leftOf(windowNumber: target.windowNumber)
+        let moved = moveNativeMenuBarWindow(
+            windowNumber: item.windowNumber,
+            ownerPID: item.sourcePID,
+            relation: relation,
+            timeout: 0.55
+        )
+        notchInteractionDebug(
+            "moveHiddenItem finished sourceWindowID=\(item.windowNumber) targetWindowID=\(target.windowNumber) moved=\(moved)"
+        )
+        finishNativeMenuBarMutation(refreshProxy: true)
+    }
+
+    private func scheduleNativeRestore(
+        windowNumber: Int,
+        ownerPID: pid_t,
+        relation: NativeMenuBarRelation,
+        screen: NSScreen
+    ) {
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.restoreNativeMenuBarWindow(
+                windowNumber: windowNumber,
+                ownerPID: ownerPID,
+                relation: relation,
+                screen: screen,
+                attempt: 0
             )
+        }
+        pendingNativeRestoreWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55, execute: workItem)
+    }
+
+    private func restoreNativeMenuBarWindow(
+        windowNumber: Int,
+        ownerPID: pid_t,
+        relation: NativeMenuBarRelation,
+        screen: NSScreen,
+        attempt: Int
+    ) {
+        if ownerPIDHasTransientMenuBarUI(ownerPID) && attempt < 12 {
+            notchInteractionDebug("restore waitUI windowID=\(windowNumber) attempt=\(attempt)")
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.restoreNativeMenuBarWindow(
+                    windowNumber: windowNumber,
+                    ownerPID: ownerPID,
+                    relation: relation,
+                    screen: screen,
+                    attempt: attempt + 1
+                )
+            }
+            pendingNativeRestoreWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: workItem)
+            return
+        }
+
+        let cursorLocation = CGEvent(source: nil)?.location
+        CGAssociateMouseAndMouseCursorPosition(0)
+        let restored = moveNativeMenuBarWindow(
+            windowNumber: windowNumber,
+            ownerPID: ownerPID,
+            relation: relation,
+            timeout: 0.55
+        )
+        if let cursorLocation {
+            CGWarpMouseCursorPosition(cursorLocation)
+        }
+        CGAssociateMouseAndMouseCursorPosition(1)
+        notchInteractionDebug(
+            "restore finished windowID=\(windowNumber) restored=\(restored) attempt=\(attempt)"
+        )
+        finishNativeMenuBarMutation(refreshProxy: true)
+    }
+
+    private func finishNativeMenuBarMutation(refreshProxy: Bool) {
+        pendingNativeRestoreWorkItem?.cancel()
+        pendingNativeRestoreWorkItem = nil
+        isNativeMenuBarMutationInFlight = false
+        guard refreshProxy, Preferences.showHiddenItemsInSeparateBar else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            self?.expandHiddenItemsBar()
         }
     }
 
-    private func postTargetedClick(to item: HiddenItemsBarItem) -> Bool {
-        let source = CGEventSource(stateID: .hidSystemState)
-        source?.localEventsSuppressionInterval = 0
-        let currentRect = currentQuartzRect(forMenuBarWindow: item.windowNumber)
-            ?? quartzRectFromAppKitRect(item.sourceRect)
+    private func moveNativeMenuBarWindow(
+        windowNumber: Int,
+        ownerPID: pid_t,
+        relation: NativeMenuBarRelation,
+        timeout: TimeInterval
+    ) -> Bool {
+        for attempt in 1...3 {
+            guard
+                let sourceRect = currentQuartzRect(forMenuBarWindow: windowNumber),
+                let targetRect = currentQuartzRect(forMenuBarWindow: relation.targetWindowNumber),
+                let targetPID = ownerPID(forMenuBarWindow: relation.targetWindowNumber)
+            else {
+                notchInteractionDebug(
+                    "nativeMove missingGeometry windowID=\(windowNumber) target=\(relation.targetWindowNumber) attempt=\(attempt)"
+                )
+                return false
+            }
+
+            if nativeWindow(sourceRect, satisfies: relation, targetRect: targetRect) {
+                notchInteractionDebug(
+                    "nativeMove alreadyPlaced windowID=\(windowNumber) target=\(relation.targetWindowNumber)"
+                )
+                return true
+            }
+
+            let points = movePoints(sourceRect: sourceRect, targetRect: targetRect, relation: relation)
+            guard postNativeMenuBarMove(
+                sourceWindowNumber: windowNumber,
+                sourcePID: ownerPID,
+                targetWindowNumber: relation.targetWindowNumber,
+                targetPID: targetPID,
+                start: points.start,
+                end: points.end
+            ) else {
+                continue
+            }
+
+            if let updated = waitForWindowMove(windowNumber: windowNumber, from: sourceRect, timeout: timeout),
+               nativeWindow(updated, satisfies: relation, targetRect: currentQuartzRect(forMenuBarWindow: relation.targetWindowNumber) ?? targetRect)
+                || hypot(updated.minX - sourceRect.minX, updated.minY - sourceRect.minY) > 1
+            {
+                notchInteractionDebug(
+                    "nativeMove ok windowID=\(windowNumber) attempt=\(attempt) rect=\(NSStringFromRect(updated))"
+                )
+                return true
+            }
+            notchInteractionDebug("nativeMove retry windowID=\(windowNumber) attempt=\(attempt)")
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+        }
+        return false
+    }
+
+    private func postNativeMenuBarMove(
+        sourceWindowNumber: Int,
+        sourcePID: pid_t,
+        targetWindowNumber: Int,
+        targetPID: pid_t,
+        start: CGPoint,
+        end: CGPoint
+    ) -> Bool {
+        let source = makeMenuBarEventSource()
+        guard
+            let mouseDown = CGEvent(
+                mouseEventSource: source,
+                mouseType: .leftMouseDown,
+                mouseCursorPosition: start,
+                mouseButton: .left
+            ),
+            let mouseUp = CGEvent(
+                mouseEventSource: source,
+                mouseType: .leftMouseUp,
+                mouseCursorPosition: end,
+                mouseButton: .left
+            )
+        else {
+            return false
+        }
+
+        configureNativeMenuBarMoveEvent(mouseDown, windowNumber: sourceWindowNumber, ownerPID: sourcePID, command: true)
+        configureNativeMenuBarMoveEvent(mouseUp, windowNumber: targetWindowNumber, ownerPID: targetPID, command: false)
+        mouseDown.post(tap: .cghidEventTap)
+        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+        mouseUp.post(tap: .cghidEventTap)
+        mouseUp.post(tap: .cghidEventTap)
+        return true
+    }
+
+    private func postTargetedClick(windowNumber: Int, ownerPID: pid_t) -> Bool {
+        let source = makeMenuBarEventSource()
+        let currentRect = currentQuartzRect(forMenuBarWindow: windowNumber)
+        guard let currentRect else {
+            notchInteractionDebug("click targetedEventNoRect windowID=\(windowNumber)")
+            return false
+        }
         let clickPoint = CGPoint(x: currentRect.midX, y: currentRect.midY)
         guard
             let mouseDown = CGEvent(
@@ -1266,26 +1517,201 @@ extension StatusBarController {
                 mouseButton: .left
             )
         else {
-            notchInteractionDebug("click targetedEventCreationFailed windowID=\(item.windowNumber)")
+            notchInteractionDebug("click targetedEventCreationFailed windowID=\(windowNumber)")
             return false
         }
 
-        configureTargetedClickEvent(mouseDown, for: item, clickState: 1)
-        configureTargetedClickEvent(mouseUp, for: item, clickState: 0)
+        configureTargetedClickEvent(mouseDown, windowNumber: windowNumber, ownerPID: ownerPID, clickState: 1)
+        configureTargetedClickEvent(mouseUp, windowNumber: windowNumber, ownerPID: ownerPID, clickState: 0)
         notchInteractionDebug(
-            "click targetedEventBegin windowID=\(item.windowNumber) ownerPID=\(item.sourcePID) currentRect=\(NSStringFromRect(currentRect)) clickPoint=\(NSStringFromPoint(clickPoint))"
+            "click targetedEventBegin windowID=\(windowNumber) ownerPID=\(ownerPID) currentRect=\(NSStringFromRect(currentRect)) clickPoint=\(NSStringFromPoint(clickPoint))"
         )
-        mouseDown.postToPid(item.sourcePID)
-        mouseUp.postToPid(item.sourcePID)
+        mouseDown.postToPid(ownerPID)
+        mouseUp.postToPid(ownerPID)
+        mouseUp.postToPid(ownerPID)
         return true
     }
 
-    private func configureTargetedClickEvent(_ event: CGEvent, for item: HiddenItemsBarItem, clickState: Int64) {
-        let windowID = Int64(item.windowNumber)
-        event.setIntegerValueField(.eventTargetUnixProcessID, value: Int64(item.sourcePID))
+    private func makeMenuBarEventSource() -> CGEventSource? {
+        let source = CGEventSource(stateID: .hidSystemState)
+        source?.localEventsSuppressionInterval = 0
+        source?.setLocalEventsFilterDuringSuppressionState(
+            [.permitLocalMouseEvents, .permitLocalKeyboardEvents, .permitSystemDefinedEvents],
+            state: .eventSuppressionStateSuppressionInterval
+        )
+        return source
+    }
+
+    private func configureNativeMenuBarMoveEvent(
+        _ event: CGEvent,
+        windowNumber: Int,
+        ownerPID: pid_t,
+        command: Bool
+    ) {
+        let windowID = Int64(windowNumber)
+        event.flags = command ? .maskCommand : []
+        event.setIntegerValueField(.eventTargetUnixProcessID, value: Int64(ownerPID))
+        event.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: windowID)
+        event.setIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent, value: windowID)
+        event.setIntegerValueField(menuBarItemWindowIDField, value: windowID)
+    }
+
+    private func configureTargetedClickEvent(
+        _ event: CGEvent,
+        windowNumber: Int,
+        ownerPID: pid_t,
+        clickState: Int64
+    ) {
+        let windowID = Int64(windowNumber)
+        event.setIntegerValueField(.eventTargetUnixProcessID, value: Int64(ownerPID))
         event.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: windowID)
         event.setIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent, value: windowID)
         event.setIntegerValueField(.mouseEventClickState, value: clickState)
+    }
+
+    private func movePoints(
+        sourceRect: CGRect,
+        targetRect: CGRect,
+        relation: NativeMenuBarRelation
+    ) -> (start: CGPoint, end: CGPoint) {
+        switch relation {
+        case .leftOf:
+            var start = CGPoint(x: targetRect.minX, y: targetRect.midY)
+            var end = start
+            if sourceRect.maxX <= targetRect.minX {
+                end.x -= sourceRect.width
+            } else {
+                start.x -= 1
+            }
+            return (start, end)
+        case .rightOf:
+            var start = CGPoint(x: targetRect.maxX, y: targetRect.midY)
+            var end = start
+            if sourceRect.minX <= targetRect.maxX {
+                end.x -= sourceRect.width
+            } else {
+                start.x += 1
+            }
+            return (start, end)
+        }
+    }
+
+    private func nativeWindow(_ sourceRect: CGRect, satisfies relation: NativeMenuBarRelation, targetRect: CGRect) -> Bool {
+        switch relation {
+        case .leftOf:
+            return abs(sourceRect.maxX - targetRect.minX) <= 1.5
+        case .rightOf:
+            return abs(sourceRect.minX - targetRect.maxX) <= 1.5
+        }
+    }
+
+    private func waitForWindowMove(windowNumber: Int, from initialRect: CGRect, timeout: TimeInterval) -> CGRect? {
+        let deadline = Date().addingTimeInterval(timeout)
+        var latest = currentQuartzRect(forMenuBarWindow: windowNumber)
+        while Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+            latest = currentQuartzRect(forMenuBarWindow: windowNumber)
+            if let latest, hypot(latest.minX - initialRect.minX, latest.minY - initialRect.minY) > 1 {
+                return latest
+            }
+        }
+        return latest
+    }
+
+    private func returnRelation(forWindowNumber windowNumber: Int) -> NativeMenuBarRelation? {
+        let windows = orderedStatusWindows()
+        guard let index = windows.firstIndex(where: { $0.windowNumber == windowNumber }) else {
+            return nil
+        }
+        if windows.indices.contains(index + 1) {
+            return .leftOf(windowNumber: windows[index + 1].windowNumber)
+        }
+        if windows.indices.contains(index - 1) {
+            return .rightOf(windowNumber: windows[index - 1].windowNumber)
+        }
+        return nil
+    }
+
+    private func visibleSlotRelation(on screen: NSScreen, excluding windowNumber: Int) -> NativeMenuBarRelation? {
+        if let separatorWindowNumber = btnSeparate.button?.window?.windowNumber,
+           separatorWindowNumber != windowNumber
+        {
+            return .leftOf(windowNumber: separatorWindowNumber)
+        }
+
+        let rightArea = rightMenuBarArea(on: screen)
+        let visible = orderedStatusWindows().filter { window in
+            window.windowNumber != windowNumber
+                && appKitRectFromQuartzRect(window.quartzRect, on: screen).minX >= rightArea.minX - 2
+        }
+        guard let anchor = visible.first else { return nil }
+        return .leftOf(windowNumber: anchor.windowNumber)
+    }
+
+    private func orderedStatusWindows() -> [NativeMenuBarWindow] {
+        guard let windowList = menuBarWindowList() else { return [] }
+        return windowList.compactMap { info -> NativeMenuBarWindow? in
+            guard
+                (info[kCGWindowLayer as String] as? Int) == 25,
+                let windowNumber = info[kCGWindowNumber as String] as? Int,
+                let sourcePID = (info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
+                let bounds = info[kCGWindowBounds as String] as? [String: Any],
+                let quartzRect = rectFromWindowBounds(bounds),
+                quartzRect.width > 4,
+                quartzRect.height > 4
+            else {
+                return nil
+            }
+            return NativeMenuBarWindow(windowNumber: windowNumber, sourcePID: sourcePID, quartzRect: quartzRect)
+        }
+        .sorted { $0.quartzRect.minX < $1.quartzRect.minX }
+    }
+
+    private func ownerPID(forMenuBarWindow windowNumber: Int) -> pid_t? {
+        orderedStatusWindows().first(where: { $0.windowNumber == windowNumber })?.sourcePID
+    }
+
+    private func isQuartzRectVisibleInRightMenuBar(_ quartzRect: CGRect, on screen: NSScreen) -> Bool {
+        let appKitRect = appKitRectFromQuartzRect(quartzRect, on: screen)
+        let rightArea = rightMenuBarArea(on: screen)
+        return appKitRect.minX >= rightArea.minX - 2 && appKitRect.maxX <= rightArea.maxX + 2
+    }
+
+    private func rightMenuBarArea(on screen: NSScreen) -> CGRect {
+        if #available(macOS 12.0, *), let auxiliaryRightArea = screen.auxiliaryTopRightArea {
+            return auxiliaryRightArea
+        }
+        let menuBarHeight = max(22, screen.frame.maxY - screen.visibleFrame.maxY)
+        return CGRect(
+            x: screen.frame.midX,
+            y: screen.frame.maxY - menuBarHeight,
+            width: screen.frame.width / 2,
+            height: menuBarHeight
+        )
+    }
+
+    private func ownerPIDHasTransientMenuBarUI(_ ownerPID: pid_t) -> Bool {
+        let ownStatusWindows = Set(orderedStatusWindows().map(\.windowNumber))
+        guard
+            let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+                as? [[String: Any]]
+        else {
+            return false
+        }
+
+        return windows.contains { info in
+            guard
+                (info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == ownerPID,
+                let windowNumber = info[kCGWindowNumber as String] as? Int,
+                !ownStatusWindows.contains(windowNumber),
+                let layer = info[kCGWindowLayer as String] as? Int,
+                layer >= 0,
+                (info[kCGWindowAlpha as String] as? Double) ?? 1 > 0.05
+            else {
+                return false
+            }
+            return true
+        }
     }
 
     private func currentQuartzRect(forMenuBarWindow windowNumber: Int) -> CGRect? {
@@ -1294,51 +1720,6 @@ extension StatusBarController {
         }).flatMap { info in
             guard let bounds = info[kCGWindowBounds as String] as? [String: Any] else { return nil }
             return rectFromWindowBounds(bounds)
-        }
-    }
-
-    private func accessibilityElement(for item: HiddenItemsBarItem) -> AXUIElement? {
-        let sourceRect = quartzRectFromAppKitRect(item.sourceRect)
-        return accessibilityMenuBarItems().first {
-            hypot($0.frame.midX - sourceRect.midX, $0.frame.midY - sourceRect.midY) <= 8
-        }?.element
-    }
-
-    private func moveHiddenItem(_ item: HiddenItemsBarItem, relativeTo target: HiddenItemsBarItem, placeAfter: Bool) {
-        notchInteractionDebug(
-            "moveHiddenItem entered sourceWindowID=\(item.windowNumber) sourceRect=\(NSStringFromRect(item.sourceRect)) targetWindowID=\(target.windowNumber) targetRect=\(NSStringFromRect(target.sourceRect)) placeAfter=\(placeAfter)"
-        )
-        guard canForwardClicksToMenuBarItems() else { return }
-
-        let sourceRect = quartzRectFromAppKitRect(item.sourceRect)
-        let targetRect = quartzRectFromAppKitRect(target.sourceRect)
-        let destination = CGPoint(
-            x: targetRect.midX + (placeAfter ? targetRect.width / 4 : -targetRect.width / 4),
-            y: targetRect.midY
-        )
-        let eventSource = CGEventSource(stateID: .combinedSessionState)
-        guard
-            let mouseDown = CGEvent(mouseEventSource: eventSource, mouseType: .leftMouseDown, mouseCursorPosition: CGPoint(x: sourceRect.midX, y: sourceRect.midY), mouseButton: .left),
-            let mouseDrag = CGEvent(mouseEventSource: eventSource, mouseType: .leftMouseDragged, mouseCursorPosition: destination, mouseButton: .left),
-            let mouseUp = CGEvent(mouseEventSource: eventSource, mouseType: .leftMouseUp, mouseCursorPosition: destination, mouseButton: .left),
-            let cursorLocation = CGEvent(source: nil)?.location
-        else { return }
-
-        [mouseDown, mouseDrag, mouseUp].forEach { $0.flags = .maskCommand }
-        CGAssociateMouseAndMouseCursorPosition(0)
-        mouseDown.post(tap: CGEventTapLocation.cghidEventTap)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-            mouseDrag.post(tap: CGEventTapLocation.cghidEventTap)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
-            mouseUp.post(tap: CGEventTapLocation.cghidEventTap)
-            CGWarpMouseCursorPosition(cursorLocation)
-            CGAssociateMouseAndMouseCursorPosition(1)
-            guard let self else { return }
-            self.btnSeparate.length = self.btnHiddenCollapseLength
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                self.expandHiddenItemsBar()
-            }
         }
     }
 
