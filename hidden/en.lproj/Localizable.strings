@@ -12,6 +12,21 @@
 "Disable Auto Collapse" = "Disable Auto Collapse";
 "Quit" = "Quit";
 "Set Shortcut" = "Set Shortcut";
+"Items" = "Items";
+"Hidden" = "Hidden";
+"Visible" = "Visible";
+"Refresh" = "Refresh";
+"Grant Access" = "Grant Access";
+"Unknown" = "Unknown";
+"Drag items within a list to reorder them, or between lists to hide and show them." = "Drag items within a list to reorder them, or between lists to hide and show them.";
+"Enable Hidden Bar in System Settings, then return and refresh." = "Enable Hidden Bar in System Settings, then return and refresh.";
+"Scanning menu bar items…" = "Scanning menu bar items…";
+"Accessibility permission is required to list and move menu bar items." = "Accessibility permission is required to list and move menu bar items.";
+"No manageable menu bar items were found." = "No manageable menu bar items were found.";
+"Drop an item to apply the real menu bar position." = "Drop an item to apply the real menu bar position.";
+"Couldn't find a drop target in the menu bar." = "Couldn't find a drop target in the menu bar.";
+"Moving %@…" = "Moving %@…";
+"Couldn't move that item. Try again after refreshing." = "Couldn't move that item. Try again after refreshing.";
 "Tutorial text" = "
 Use the always hidden feature to keep your icons tidy. Here's how to set it
 Steps to enable:

@@ -12,6 +12,7 @@ class PreferencesWindowController: NSWindowController {
     
     enum MenuSegment: Int {
         case general
+        case items
         case about
     }
     
@@ -27,7 +28,7 @@ class PreferencesWindowController: NSWindowController {
     }
     
     private let preferencesVC = PreferencesViewController.initWithStoryboard()
-    
+    private let itemManagerVC = MenuBarItemManagerViewController()
     private let aboutVC = AboutViewController.initWithStoryboard()
     
     override func windowDidLoad() {
@@ -58,6 +59,8 @@ class PreferencesWindowController: NSWindowController {
         switch menuSegment {
         case .general:
             self.window?.contentViewController = preferencesVC
+        case .items:
+            self.window?.contentViewController = itemManagerVC
         case .about:
             self.window?.contentViewController = aboutVC
         }

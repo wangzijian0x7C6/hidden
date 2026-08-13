@@ -292,6 +292,23 @@ class StatusBarController {
             
         }
     }
+
+    func prepareForItemManagement(completion: @escaping (MenuBarManagementLayout) -> Void) {
+        if isCollapsed {
+            expandMenubar()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard
+                let self,
+                let separatorFrame = self.btnSeparate.button?.window?.frame,
+                let expandCollapseFrame = self.btnExpandCollapse.button?.window?.frame
+            else { return }
+            completion(MenuBarManagementLayout(
+                separatorFrame: separatorFrame,
+                expandCollapseFrame: expandCollapseFrame
+            ))
+        }
+    }
     
     private func autoCollapseIfNeeded() {
         guard Preferences.isAutoHide else {return}

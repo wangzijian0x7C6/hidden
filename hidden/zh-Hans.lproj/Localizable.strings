@@ -12,6 +12,21 @@
 "Disable Auto Collapse" = "关闭自动折叠";
 "Quit" = "退出";
 "Set Shortcut" = "设置快捷键";
+"Items" = "图标";
+"Hidden" = "隐藏";
+"Visible" = "显示";
+"Refresh" = "刷新";
+"Grant Access" = "授予权限";
+"Unknown" = "未知";
+"Drag items within a list to reorder them, or between lists to hide and show them." = "在列表内拖动可排序，在两列之间拖动可隐藏或显示。";
+"Enable Hidden Bar in System Settings, then return and refresh." = "请在系统设置中启用 Hidden Bar，返回后再刷新。";
+"Scanning menu bar items…" = "正在扫描菜单栏图标…";
+"Accessibility permission is required to list and move menu bar items." = "列出和移动菜单栏图标需要辅助功能权限。";
+"No manageable menu bar items were found." = "没有找到可管理的菜单栏图标。";
+"Drop an item to apply the real menu bar position." = "拖放图标以应用到真实菜单栏位置。";
+"Couldn't find a drop target in the menu bar." = "找不到菜单栏中的放置位置。";
+"Moving %@…" = "正在移动 %@…";
+"Couldn't move that item. Try again after refreshing." = "无法移动该图标，请刷新后再试。";
 "Tutorial text" = "
 使用 '持续隐藏' 功能让您的菜单栏保持整洁。这个教程将会帮助您设置这个功能。
 

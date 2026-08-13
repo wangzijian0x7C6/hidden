@@ -81,7 +81,10 @@
 "B2x-1Q-Aei.ibShadowedLabels[0]" = "Général";
 
 /* Class = "NSSegmentedCell"; B2x-1Q-Aei.ibShadowedLabels[1] = "About"; ObjectID = "B2x-1Q-Aei"; */
-"B2x-1Q-Aei.ibShadowedLabels[1]" = "À propos";
+"B2x-1Q-Aei.ibShadowedLabels[1]" = "Éléments";
+
+/* Class = "NSSegmentedCell"; B2x-1Q-Aei.ibShadowedLabels[2] = "About"; ObjectID = "B2x-1Q-Aei"; */
+"B2x-1Q-Aei.ibShadowedLabels[2]" = "À propos";
 
 /* Class = "NSMenuItem"; title = "Preferences…"; ObjectID = "BOF-NM-1cW"; */
 "BOF-NM-1cW.title" = "Réglages";
