@@ -47,6 +47,7 @@ struct HiddenItemsBarItem {
     let sourceRect: CGRect
     let windowNumber: Int
     let sourcePID: pid_t
+    let creatingPID: pid_t
     let accessibilityElement: AXUIElement?
 }
 

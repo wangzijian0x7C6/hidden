@@ -758,6 +758,7 @@ extension StatusBarController {
             let windowImage = windowID.flatMap { captureMenuBarWindow($0) }
             let image: NSImage
             let accessibilityElement: AXUIElement?
+            var creatingPID = sourcePID
             if let windowImage = windowImage {
                 image = NSImage(cgImage: windowImage, size: appKitRect.size)
                 let match = accessibilityItems.first(where: {
@@ -766,6 +767,7 @@ extension StatusBarController {
                 accessibilityElement = match?.element
                 if let match {
                     menuBarIconCache[CFHash(match.element)] = image
+                    creatingPID = processID(of: match.element) ?? creatingPID
                 }
             } else {
                 guard let match = accessibilityItems.first(where: {
@@ -780,6 +782,7 @@ extension StatusBarController {
                 image = menuBarIconCache[CFHash(match.element)] ?? (match.icon.copy() as? NSImage ?? match.icon)
                 image.size = CGSize(width: min(max(quartzRect.width, 18), 24), height: min(max(quartzRect.height, 18), 24))
                 accessibilityElement = match.element
+                creatingPID = processID(of: match.element) ?? creatingPID
             }
 
             return (
@@ -788,6 +791,7 @@ extension StatusBarController {
                     sourceRect: appKitRect,
                     windowNumber: windowNumber,
                     sourcePID: sourcePID,
+                    creatingPID: creatingPID,
                     accessibilityElement: accessibilityElement
                 ),
                 quartzRect: quartzRect
@@ -1240,7 +1244,7 @@ extension StatusBarController {
         pendingNativeRestoreWorkItem?.cancel()
         hiddenItemsBarController.hide()
 
-        let eventPID = creatingProcessPID(for: item)
+        let eventPID = item.creatingPID
         notchInteractionDebug(
             "click begin windowID=\(item.windowNumber) ownerPID=\(item.sourcePID) eventPID=\(eventPID) sourceRect=\(NSStringFromRect(item.sourceRect)) screen=\(NSStringFromRect(capture.screen.frame)) cursorBefore=\(cursorBefore.map { NSStringFromPoint($0) } ?? "nil")"
         )
@@ -1269,6 +1273,7 @@ extension StatusBarController {
                     windowNumber: item.windowNumber,
                     eventPID: eventPID,
                     relation: slot,
+                    screen: capture.screen,
                     timeout: 0.45
                 ) else {
                     notchInteractionDebug("click tempMoveFailed windowID=\(item.windowNumber)")
@@ -1277,6 +1282,15 @@ extension StatusBarController {
                 }
                 didTemporarilyMove = true
                 RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.08))
+            }
+
+            let currentRect = currentQuartzRect(forMenuBarWindow: item.windowNumber)
+            guard let currentRect, isQuartzRectVisibleInRightMenuBar(currentRect, on: capture.screen) else {
+                notchInteractionDebug(
+                    "click skipped stillOffscreen windowID=\(item.windowNumber) rect=\(currentRect.map { NSStringFromRect($0) } ?? "nil")"
+                )
+                finishNativeMenuBarMutation(refreshProxy: true)
+                return
             }
 
             let posted = postTargetedClick(windowNumber: item.windowNumber, eventPID: eventPID)
@@ -1318,16 +1332,18 @@ extension StatusBarController {
         pendingNativeRestoreWorkItem?.cancel()
         hiddenItemsBarController.hide()
 
-        let eventPID = creatingProcessPID(for: item)
+        let eventPID = item.creatingPID
         let cursorLocation = CGEvent(source: nil)?.location
         withHiddenCursor {
             let relation: NativeMenuBarRelation = placeAfter
                 ? .rightOf(windowNumber: target.windowNumber)
                 : .leftOf(windowNumber: target.windowNumber)
+            let screen = lastOverflowCapture?.screen ?? NSScreen.main
             let moved = moveNativeMenuBarWindow(
                 windowNumber: item.windowNumber,
                 eventPID: eventPID,
                 relation: relation,
+                screen: screen,
                 timeout: 0.55
             )
             notchInteractionDebug(
@@ -1367,28 +1383,13 @@ extension StatusBarController {
         screen: NSScreen,
         attempt: Int
     ) {
-        if ownerPIDHasTransientMenuBarUI(eventPID) && attempt < 12 {
-            notchInteractionDebug("restore waitUI windowID=\(windowNumber) attempt=\(attempt)")
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.restoreNativeMenuBarWindow(
-                    windowNumber: windowNumber,
-                    eventPID: eventPID,
-                    relation: relation,
-                    screen: screen,
-                    attempt: attempt + 1
-                )
-            }
-            pendingNativeRestoreWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: workItem)
-            return
-        }
-
         let cursorLocation = CGEvent(source: nil)?.location
         withHiddenCursor {
             let restored = moveNativeMenuBarWindow(
                 windowNumber: windowNumber,
                 eventPID: eventPID,
                 relation: relation,
+                screen: screen,
                 timeout: 0.55
             )
             notchInteractionDebug(
@@ -1426,6 +1427,7 @@ extension StatusBarController {
         windowNumber: Int,
         eventPID: pid_t,
         relation: NativeMenuBarRelation,
+        screen: NSScreen?,
         timeout: TimeInterval
     ) -> Bool {
         for attempt in 1...3 {
@@ -1439,7 +1441,7 @@ extension StatusBarController {
                 return false
             }
 
-            if nativeWindow(sourceRect, satisfies: relation, targetRect: targetRect) {
+            if isSuccessfulMove(sourceRect, relation: relation, targetRect: targetRect, screen: screen) {
                 notchInteractionDebug(
                     "nativeMove alreadyPlaced windowID=\(windowNumber) target=\(relation.targetWindowNumber)"
                 )
@@ -1459,10 +1461,7 @@ extension StatusBarController {
 
             let updated = waitForWindowMove(windowNumber: windowNumber, from: sourceRect, timeout: timeout)
             let latestTarget = currentQuartzRect(forMenuBarWindow: relation.targetWindowNumber) ?? targetRect
-            if let updated,
-               nativeWindow(updated, satisfies: relation, targetRect: latestTarget)
-                || hypot(updated.minX - sourceRect.minX, updated.minY - sourceRect.minY) > 1
-            {
+            if let updated, isSuccessfulMove(updated, relation: relation, targetRect: latestTarget, screen: screen) {
                 notchInteractionDebug(
                     "nativeMove ok windowID=\(windowNumber) attempt=\(attempt) rect=\(NSStringFromRect(updated))"
                 )
@@ -1474,6 +1473,19 @@ extension StatusBarController {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
         }
         return false
+    }
+
+    private func isSuccessfulMove(
+        _ rect: CGRect,
+        relation: NativeMenuBarRelation,
+        targetRect: CGRect,
+        screen: NSScreen?
+    ) -> Bool {
+        if nativeWindow(rect, satisfies: relation, targetRect: targetRect) {
+            return true
+        }
+        guard let screen else { return false }
+        return isQuartzRectVisibleInRightMenuBar(rect, on: screen)
     }
 
     private func postNativeMenuBarMove(
@@ -1561,26 +1573,10 @@ extension StatusBarController {
         CGDisplayShowCursor(CGMainDisplayID())
     }
 
-    private func creatingProcessPID(for item: HiddenItemsBarItem) -> pid_t {
+    private func processID(of element: AXUIElement) -> pid_t? {
         var pid: pid_t = 0
-        if let element = item.accessibilityElement, AXUIElementGetPid(element, &pid) == .success, pid != 0 {
-            return pid
-        }
-        return creatingProcessPID(windowNumber: item.windowNumber, fallback: item.sourcePID)
-    }
-
-    private func creatingProcessPID(windowNumber: Int, fallback: pid_t) -> pid_t {
-        guard let quartzRect = currentQuartzRect(forMenuBarWindow: windowNumber) else {
-            return fallback
-        }
-        let match = accessibilityMenuBarItems().first {
-            hypot($0.frame.midX - quartzRect.midX, $0.frame.midY - quartzRect.midY) <= 8
-        }
-        var pid: pid_t = 0
-        if let element = match?.element, AXUIElementGetPid(element, &pid) == .success, pid != 0 {
-            return pid
-        }
-        return fallback
+        guard AXUIElementGetPid(element, &pid) == .success, pid != 0 else { return nil }
+        return pid
     }
 
     private func makeMenuBarEventSource() -> CGEventSource? {
@@ -1769,30 +1765,6 @@ extension StatusBarController {
             width: screen.frame.width / 2,
             height: menuBarHeight
         )
-    }
-
-    private func ownerPIDHasTransientMenuBarUI(_ ownerPID: pid_t) -> Bool {
-        let ownStatusWindows = Set(orderedStatusWindows().map(\.windowNumber))
-        guard
-            let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
-                as? [[String: Any]]
-        else {
-            return false
-        }
-
-        return windows.contains { info in
-            guard
-                (info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == ownerPID,
-                let windowNumber = info[kCGWindowNumber as String] as? Int,
-                !ownStatusWindows.contains(windowNumber),
-                let layer = info[kCGWindowLayer as String] as? Int,
-                layer >= 0,
-                (info[kCGWindowAlpha as String] as? Double) ?? 1 > 0.05
-            else {
-                return false
-            }
-            return true
-        }
     }
 
     private func currentQuartzRect(forMenuBarWindow windowNumber: Int) -> CGRect? {
