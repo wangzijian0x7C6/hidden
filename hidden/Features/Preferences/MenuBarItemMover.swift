@@ -27,30 +27,6 @@ struct MenuBarManagementLayout {
     let expandCollapseFrame: CGRect
 }
 
-struct ManagedMenuBarItem {
-    let id: String
-    let windowNumber: Int
-    let pid: pid_t
-    let appName: String
-    let title: String
-    let icon: NSImage?
-    let quartzRect: CGRect
-    let section: Section
-
-    enum Section {
-        case hidden
-        case visible
-    }
-
-    var primaryName: String {
-        let cleaned = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !cleaned.isEmpty, cleaned != "-", !cleaned.hasPrefix("Item-") {
-            return cleaned
-        }
-        return appName
-    }
-}
-
 enum NativeMenuBarRelation {
     case leftOf(windowNumber: Int)
     case rightOf(windowNumber: Int)
@@ -73,36 +49,56 @@ enum MenuBarItemMover {
                 app.processIdentifier == 0 ? nil : (app.processIdentifier, app)
             }
         )
-        let axTitles = extraTitlesByPID()
-        let separatorMidX = layout.separatorFrame.midX
-
-        return menuBarWindows().compactMap { info in
+        let windows = menuBarWindows().compactMap { info -> (pid: pid_t, windowNumber: Int, rect: CGRect, ownerName: String?, windowName: String?)? in
             guard
                 let pid = info[kCGWindowOwnerPID as String] as? pid_t,
-                pid != ownPID,
-                (info[kCGWindowLayer as String] as? Int).map { $0 == 25 } ?? true,
                 let windowNumber = info[kCGWindowNumber as String] as? Int,
                 let bounds = info[kCGWindowBounds as String] as? [String: Any],
                 let rect = rect(from: bounds),
-                rect.height > 4, rect.width > 4, rect.width < 240
+                MenuBarItemPresentation.isManageableExtra(
+                    ownerPID: pid,
+                    ownPID: ownPID,
+                    layer: info[kCGWindowLayer as String] as? Int,
+                    width: rect.width,
+                    height: rect.height
+                )
             else {
                 return nil
             }
+            return (
+                pid,
+                windowNumber,
+                rect,
+                info[kCGWindowOwnerName as String] as? String,
+                info[kCGWindowName as String] as? String
+            )
+        }
 
-            let app = apps[pid]
-            let appName = app?.localizedName
-                ?? (info[kCGWindowOwnerName as String] as? String)
-                ?? "Unknown".localized
-            let title = matchedTitle(in: axTitles[pid] ?? [], rect: rect) ?? ""
+        let axTitles = extraTitles(
+            for: MenuBarItemPresentation.accessibilityPidsToScan(
+                extraPids: windows.map(\.pid),
+                trusted: AXIsProcessTrusted()
+            )
+        )
+        let separatorMidX = layout.separatorFrame.midX
+
+        return windows.map { window in
+            let app = apps[window.pid]
+            let appName = app?.localizedName ?? window.ownerName ?? "Unknown".localized
+            let axTitle = matchedTitle(in: axTitles[window.pid] ?? [], rect: window.rect)
             return ManagedMenuBarItem(
-                id: "\(pid)-\(windowNumber)",
-                windowNumber: windowNumber,
-                pid: pid,
+                id: "\(window.pid)-\(window.windowNumber)",
+                windowNumber: window.windowNumber,
+                pid: window.pid,
                 appName: appName,
-                title: title,
-                icon: app?.icon,
-                quartzRect: rect,
-                section: rect.midX < separatorMidX ? .hidden : .visible
+                title: MenuBarItemPresentation.displayName(
+                    axTitle: axTitle,
+                    windowName: window.windowName,
+                    appName: appName
+                ),
+                icon: captureIcon(windowNumber: window.windowNumber) ?? app?.icon,
+                quartzRect: window.rect,
+                section: MenuBarItemPresentation.section(itemMidX: window.rect.midX, separatorMidX: separatorMidX)
             )
         }
         .sorted { $0.quartzRect.minX < $1.quartzRect.minX }
@@ -199,11 +195,10 @@ enum MenuBarItemMover {
         return CGRect(x: x, y: y, width: w, height: h)
     }
 
-    private static func extraTitlesByPID() -> [pid_t: [(title: String, x: CGFloat, width: CGFloat)]] {
+    private static func extraTitles(for pids: [pid_t]) -> [pid_t: [(title: String, x: CGFloat, width: CGFloat)]] {
         var result: [pid_t: [(title: String, x: CGFloat, width: CGFloat)]] = [:]
-        let ownPID = ProcessInfo.processInfo.processIdentifier
-        for app in NSWorkspace.shared.runningApplications where app.processIdentifier != ownPID {
-            let axApp = AXUIElementCreateApplication(app.processIdentifier)
+        for pid in pids {
+            let axApp = AXUIElementCreateApplication(pid)
             var extrasValue: AnyObject?
             guard AXUIElementCopyAttributeValue(axApp, "AXExtrasMenuBar" as CFString, &extrasValue) == .success else {
                 continue
@@ -222,10 +217,24 @@ enum MenuBarItemMover {
                 let title = axString(kAXTitleAttribute as CFString, of: element)
                     ?? axString(kAXDescriptionAttribute as CFString, of: element)
                     ?? ""
-                result[app.processIdentifier, default: []].append((title, position.x, size.width))
+                result[pid, default: []].append((title, position.x, size.width))
             }
         }
         return result
+    }
+
+    private static func captureIcon(windowNumber: Int) -> NSImage? {
+        guard let windowID = CGWindowID(exactly: windowNumber) else { return nil }
+        var pointer = UnsafeRawPointer(bitPattern: UInt(windowID))
+        guard let array = CFArrayCreate(nil, &pointer, 1, nil) else { return nil }
+        guard let image = CGImage(
+            windowListFromArrayScreenBounds: .null,
+            windowArray: array,
+            imageOption: [.boundsIgnoreFraming, .bestResolution]
+        ) else {
+            return nil
+        }
+        return NSImage(cgImage: image, size: NSSize(width: 18, height: 18))
     }
 
     private static func matchedTitle(in extras: [(title: String, x: CGFloat, width: CGFloat)], rect: CGRect) -> String? {

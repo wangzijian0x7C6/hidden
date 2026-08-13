@@ -13,6 +13,9 @@
 		08A5F85A23AA007A00981CA5 /* PreferencesViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08A5F85923AA007A00981CA5 /* PreferencesViewController.swift */; };
 		7A4D10012E10000100B4A001 /* MenuBarItemManagerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4D10002E10000100B4A001 /* MenuBarItemManagerViewController.swift */; };
 		7A4D10032E10000200B4A001 /* MenuBarItemMover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4D10022E10000200B4A001 /* MenuBarItemMover.swift */; };
+		7A4D20112E10001000B4A001 /* MenuBarItemPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4D20102E10001000B4A001 /* MenuBarItemPresentation.swift */; };
+		7A4D20132E10001100B4A001 /* MenuBarItemPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4D20102E10001000B4A001 /* MenuBarItemPresentation.swift */; };
+		7A4D20152E10001200B4A001 /* MenuBarItemPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4D20142E10001200B4A001 /* MenuBarItemPresentationTests.swift */; };
 		08A5F85C23AA013100981CA5 /* SelectedSecond.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08A5F85B23AA013100981CA5 /* SelectedSecond.swift */; };
 		08A5F85F23AA01EE00981CA5 /* HotKey in Frameworks */ = {isa = PBXBuildFile; productRef = 08A5F85E23AA01EE00981CA5 /* HotKey */; };
 		08A5F86123AA085B00981CA5 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08A5F86023AA085B00981CA5 /* Preferences.swift */; };
@@ -45,6 +48,9 @@
 		08A5F85923AA007A00981CA5 /* PreferencesViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PreferencesViewController.swift; sourceTree = "<group>"; };
 		7A4D10002E10000100B4A001 /* MenuBarItemManagerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarItemManagerViewController.swift; sourceTree = "<group>"; };
 		7A4D10022E10000200B4A001 /* MenuBarItemMover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarItemMover.swift; sourceTree = "<group>"; };
+		7A4D20102E10001000B4A001 /* MenuBarItemPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarItemPresentation.swift; sourceTree = "<group>"; };
+		7A4D20142E10001200B4A001 /* MenuBarItemPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarItemPresentationTests.swift; sourceTree = "<group>"; };
+		7A4D20162E10001300B4A001 /* Hidden BarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Hidden BarTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		08A5F85B23AA013100981CA5 /* SelectedSecond.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedSecond.swift; sourceTree = "<group>"; };
 		08A5F86023AA085B00981CA5 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
 		08A5F86323AA09F300981CA5 /* UserDefault+Extension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UserDefault+Extension.swift"; sourceTree = "<group>"; };
@@ -99,6 +105,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7A4D201A2E10001500B4A001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -135,6 +148,7 @@
 				08A5F85923AA007A00981CA5 /* PreferencesViewController.swift */,
 				7A4D10002E10000100B4A001 /* MenuBarItemManagerViewController.swift */,
 				7A4D10022E10000200B4A001 /* MenuBarItemMover.swift */,
+				7A4D20102E10001000B4A001 /* MenuBarItemPresentation.swift */,
 				3CF14C81221FA49D0083D42B /* PreferencesWindowController.swift */,
 			);
 			path = Preferences;
@@ -178,6 +192,7 @@
 			children = (
 				9220587D22127050008A8B03 /* Hidden.entitlements */,
 				929113F321F9D04100173149 /* hidden */,
+				7A4D20172E10001400B4A001 /* Hidden BarTests */,
 				929113F221F9D04100173149 /* Products */,
 				92C5057D21FEC24C0084719A /* Frameworks */,
 			);
@@ -187,6 +202,7 @@
 			isa = PBXGroup;
 			children = (
 				929113F121F9D04100173149 /* Hidden Bar.app */,
+				7A4D20162E10001300B4A001 /* Hidden BarTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -227,6 +243,14 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		7A4D20172E10001400B4A001 /* Hidden BarTests */ = {
+			isa = PBXGroup;
+			children = (
+				7A4D20142E10001200B4A001 /* MenuBarItemPresentationTests.swift */,
+			);
+			path = "Hidden BarTests";
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -249,6 +273,23 @@
 			productName = vanillaClone;
 			productReference = 929113F121F9D04100173149 /* Hidden Bar.app */;
 			productType = "com.apple.product-type.application";
+		};
+		7A4D20182E10001500B4A001 /* Hidden BarTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A4D201C2E10001600B4A001 /* Build configuration list for PBXNativeTarget "Hidden BarTests" */;
+			buildPhases = (
+				7A4D20192E10001500B4A001 /* Sources */,
+				7A4D201A2E10001500B4A001 /* Frameworks */,
+				7A4D201B2E10001500B4A001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Hidden BarTests";
+			productName = "Hidden BarTests";
+			productReference = 7A4D20162E10001300B4A001 /* Hidden BarTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -296,6 +337,7 @@
 			projectRoot = "";
 			targets = (
 				929113F021F9D04100173149 /* Hidden Bar */,
+				7A4D20182E10001500B4A001 /* Hidden BarTests */,
 			);
 		};
 /* End PBXProject section */
@@ -308,6 +350,13 @@
 				929113F921F9D04200173149 /* Assets.xcassets in Resources */,
 				967F4B2824169CAF00F18D3C /* Localizable.strings in Resources */,
 				929113FC21F9D04200173149 /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A4D201B2E10001500B4A001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -333,6 +382,7 @@
 				08A5F85A23AA007A00981CA5 /* PreferencesViewController.swift in Sources */,
 				7A4D10012E10000100B4A001 /* MenuBarItemManagerViewController.swift in Sources */,
 				7A4D10032E10000200B4A001 /* MenuBarItemMover.swift in Sources */,
+				7A4D20112E10001000B4A001 /* MenuBarItemPresentation.swift in Sources */,
 				3CF14C82221FA49D0083D42B /* PreferencesWindowController.swift in Sources */,
 				92C97B8B220049D20007559C /* NSBarButtonItem+Extension.swift in Sources */,
 				92C97B8D220058740007559C /* NSView+Extension.swift in Sources */,
@@ -341,6 +391,15 @@
 				08C20FE223AB452C0035D978 /* AboutViewController.swift in Sources */,
 				00137CDF24A63DB1004AC855 /* Notification.Name+Extension.swift in Sources */,
 				08A5F86423AA09F300981CA5 /* UserDefault+Extension.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A4D20192E10001500B4A001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7A4D20132E10001100B4A001 /* MenuBarItemPresentation.swift in Sources */,
+				7A4D20152E10001200B4A001 /* MenuBarItemPresentationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -549,6 +608,34 @@
 			};
 			name = Release;
 		};
+		7A4D201D2E10001700B4A001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_TESTING_SEARCH_PATHS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dwarvesv.minimalbar.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		7A4D201E2E10001700B4A001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_TESTING_SEARCH_PATHS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dwarvesv.minimalbar.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -566,6 +653,15 @@
 			buildConfigurations = (
 				9291141821F9D04200173149 /* Debug */,
 				9291141921F9D04200173149 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7A4D201C2E10001600B4A001 /* Build configuration list for PBXNativeTarget "Hidden BarTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A4D201D2E10001700B4A001 /* Debug */,
+				7A4D201E2E10001700B4A001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

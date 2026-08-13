@@ -11,6 +11,16 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - name: Test presentation logic
+        run: >-
+          xcodebuild
+          -project "Hidden Bar.xcodeproj"
+          -scheme "Hidden Bar"
+          -configuration Debug
+          -destination "platform=macOS"
+          -derivedDataPath build/DerivedData
+          CODE_SIGNING_ALLOWED=NO
+          test
       - name: Build Hidden Bar
         run: >-
           xcodebuild

@@ -22,6 +22,7 @@
 "Enable Hidden Bar in System Settings, then return and refresh." = "请在系统设置中启用 Hidden Bar，返回后再刷新。";
 "Scanning menu bar items…" = "正在扫描菜单栏图标…";
 "Accessibility permission is required to list and move menu bar items." = "列出和移动菜单栏图标需要辅助功能权限。";
+"Grant Accessibility to show names and move items." = "授予辅助功能权限后才能显示名称并移动图标。";
 "No manageable menu bar items were found." = "没有找到可管理的菜单栏图标。";
 "Drop an item to apply the real menu bar position." = "拖放图标以应用到真实菜单栏位置。";
 "Couldn't find a drop target in the menu bar." = "找不到菜单栏中的放置位置。";

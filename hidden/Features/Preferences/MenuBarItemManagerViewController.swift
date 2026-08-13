@@ -155,8 +155,13 @@ final class MenuBarItemManagerViewController: NSViewController {
             let ownPID = ProcessInfo.processInfo.processIdentifier
             self.separatorWindowNumber = MenuBarItemMover.windowNumber(ownedBy: ownPID, nearestAppKitFrame: layout.separatorFrame)
             self.expandCollapseWindowNumber = MenuBarItemMover.windowNumber(ownedBy: ownPID, nearestAppKitFrame: layout.expandCollapseFrame)
-            let items = MenuBarItemMover.extras(layout: layout)
-            self.apply(items, accessibilityTrusted: AXIsProcessTrusted())
+            DispatchQueue.global(qos: .userInitiated).async {
+                let items = MenuBarItemMover.extras(layout: layout)
+                let trusted = AXIsProcessTrusted()
+                DispatchQueue.main.async {
+                    self.apply(items, accessibilityTrusted: trusted)
+                }
+            }
         }
     }
 
@@ -168,8 +173,10 @@ final class MenuBarItemManagerViewController: NSViewController {
         hiddenCountLabel.stringValue = "\(hiddenItems.count)"
         visibleCountLabel.stringValue = "\(visibleItems.count)"
         permissionButton.isHidden = accessibilityTrusted
-        if !accessibilityTrusted {
+        if items.isEmpty, !accessibilityTrusted {
             statusLabel.stringValue = "Accessibility permission is required to list and move menu bar items.".localized
+        } else if !accessibilityTrusted {
+            statusLabel.stringValue = "Grant Accessibility to show names and move items.".localized
         } else {
             statusLabel.stringValue = items.isEmpty
                 ? "No manageable menu bar items were found.".localized
