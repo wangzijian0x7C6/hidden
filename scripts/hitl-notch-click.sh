@@ -57,15 +57,49 @@ if grep -Fq 'moveHiddenItem entered' <<< "$NEW_LOG"; then
   printf 'DIAGNOSTIC=unexpected_drag_path\n'
 fi
 
-if grep -Fq 'click noAXMatch' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=no_ax_match\n'
-elif grep -Fq 'click denied' <<< "$NEW_LOG"; then
+if grep -Eq 'axMatch=|click pressReturned|click after100ms' <<< "$NEW_LOG" \
+  && ! grep -Eq 'moved=|click tempMove|nativeMove ' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=old_binary_still_running\n'
+  printf 'VERDICT=red\n'
+  exit 1
+fi
+
+if grep -Fq 'click denied' <<< "$NEW_LOG"; then
   printf 'DIAGNOSTIC=accessibility_denied\n'
-elif ! grep -Fq 'click after100ms' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=incomplete_ax_press_trace\n'
+  printf 'VERDICT=red\n'
+  exit 1
+fi
+
+if grep -Fq 'click noVisibleSlot' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=no_visible_slot\n'
+  printf 'VERDICT=red\n'
+  exit 1
+fi
+
+if grep -Fq 'click tempMoveFailed' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=temp_move_failed\n'
+  printf 'VERDICT=red\n'
+  exit 1
+fi
+
+if grep -Fq 'nativeMove retry' <<< "$NEW_LOG" && ! grep -Fq 'nativeMove ok' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=native_move_retry_exhausted\n'
+  printf 'VERDICT=red\n'
+  exit 1
+fi
+
+if ! grep -Eq 'click targetedEventsPosted|click tempMove' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=incomplete_click_trace\n'
   exit 2
+fi
+
+if grep -Fq 'moved=true' <<< "$NEW_LOG" || grep -Fq 'nativeMove ok' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=relocated_then_clicked\n'
+elif grep -Fq 'moved=false' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=clicked_without_relocation\n'
 else
-  printf 'DIAGNOSTIC=complete_ax_press_trace\n'
+  printf 'DIAGNOSTIC=relocation_trace_ambiguous\n'
+  exit 2
 fi
 
 case "$OPENED" in

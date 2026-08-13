@@ -1633,7 +1633,7 @@ extension StatusBarController {
     }
 
     private func visibleSlotRelation(on screen: NSScreen, excluding windowNumber: Int) -> NativeMenuBarRelation? {
-        if let separatorWindowNumber = btnSeparate.button?.window?.windowNumber,
+        if let separatorWindowNumber = cgWindowNumber(named: "hiddenbar_separate", on: screen),
            separatorWindowNumber != windowNumber
         {
             return .leftOf(windowNumber: separatorWindowNumber)
@@ -1646,6 +1646,31 @@ extension StatusBarController {
         }
         guard let anchor = visible.first else { return nil }
         return .leftOf(windowNumber: anchor.windowNumber)
+    }
+
+    private func cgWindowNumber(named name: String, on screen: NSScreen) -> Int? {
+        guard let windowList = menuBarWindowList() else { return nil }
+        let screenQuartzRect = quartzRectFromAppKitRect(screen.frame)
+        let menuBarQuartzRect = quartzMenuBarRect(on: screen)
+        return windowList.compactMap { info -> (Int, CGRect)? in
+            guard
+                (info[kCGWindowName as String] as? String) == name,
+                let windowNumber = info[kCGWindowNumber as String] as? Int,
+                windowNumber > 0,
+                windowNumber <= Int(UInt32.max),
+                let quartzRect = statusItemWindowQuartzRect(
+                    from: info,
+                    screenQuartzRect: screenQuartzRect,
+                    menuBarQuartzRect: menuBarQuartzRect
+                )
+            else {
+                return nil
+            }
+            return (windowNumber, quartzRect)
+        }
+        .sorted { $0.1.minX < $1.1.minX }
+        .first?
+        .0
     }
 
     private func orderedStatusWindows() -> [NativeMenuBarWindow] {
