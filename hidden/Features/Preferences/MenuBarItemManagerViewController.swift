@@ -45,6 +45,8 @@ final class MenuBarItemManagerViewController: NSViewController {
         let help = NSTextField(wrappingLabelWithString: "Drag items within a list to reorder them, or between lists to hide and show them.".localized)
         help.textColor = .secondaryLabelColor
         help.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        help.maximumNumberOfLines = 2
+        help.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let columns = NSStackView(views: [
             makeColumn(title: "Hidden".localized, countLabel: hiddenCountLabel, table: hiddenTable),
@@ -82,7 +84,7 @@ final class MenuBarItemManagerViewController: NSViewController {
         NSLayoutConstraint.activate([
             root.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             root.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            root.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
+            root.topAnchor.constraint(equalTo: view.topAnchor, constant: 38),
             root.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -16),
             columns.widthAnchor.constraint(equalTo: root.widthAnchor),
             columns.heightAnchor.constraint(greaterThanOrEqualToConstant: 280),
@@ -140,15 +142,20 @@ final class MenuBarItemManagerViewController: NSViewController {
     @objc private func permissionPressed() {
         let prompt = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
         AXIsProcessTrustedWithOptions(prompt)
+        if !CGPreflightScreenCaptureAccess() {
+            _ = CGRequestScreenCaptureAccess()
+        }
         statusLabel.stringValue = "Enable Hidden Bar in System Settings, then return and refresh.".localized
     }
 
     private func refresh() {
         guard !isBusy, let appDelegate = NSApp.delegate as? AppDelegate else { return }
         isBusy = true
-        permissionButton.isHidden = AXIsProcessTrusted()
         refreshButton.isEnabled = false
         statusLabel.stringValue = "Scanning menu bar items…".localized
+        if !CGPreflightScreenCaptureAccess() {
+            _ = CGRequestScreenCaptureAccess()
+        }
         appDelegate.statusBarController.prepareForItemManagement { [weak self] layout in
             guard let self else { return }
             self.layout = layout
@@ -172,11 +179,12 @@ final class MenuBarItemManagerViewController: NSViewController {
         visibleTable.reloadData()
         hiddenCountLabel.stringValue = "\(hiddenItems.count)"
         visibleCountLabel.stringValue = "\(visibleItems.count)"
-        permissionButton.isHidden = accessibilityTrusted
+        let needsAccess = !accessibilityTrusted || !CGPreflightScreenCaptureAccess()
+        permissionButton.isHidden = !needsAccess
         if items.isEmpty, !accessibilityTrusted {
             statusLabel.stringValue = "Accessibility permission is required to list and move menu bar items.".localized
-        } else if !accessibilityTrusted {
-            statusLabel.stringValue = "Grant Accessibility to show names and move items.".localized
+        } else if needsAccess {
+            statusLabel.stringValue = "Grant Accessibility and Screen Recording to show names and icons.".localized
         } else {
             statusLabel.stringValue = items.isEmpty
                 ? "No manageable menu bar items were found.".localized

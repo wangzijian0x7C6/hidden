@@ -32,5 +32,9 @@
 	<string>Main</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>Hidden Bar needs Accessibility to read and rearrange menu bar icons.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Hidden Bar needs Screen Recording to show each menu bar icon’s real image.</string>
 </dict>
 </plist>

@@ -58,4 +58,8 @@ enum MenuBarItemPresentation {
         guard trusted else { return [] }
         return Array(Set(extraPids)).sorted()
     }
+
+    static func rowIcon(windowSnapshot: NSImage?, appIcon _: NSImage?) -> NSImage? {
+        windowSnapshot
+    }
 }

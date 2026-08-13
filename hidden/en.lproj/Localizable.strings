@@ -23,6 +23,7 @@
 "Scanning menu bar items…" = "Scanning menu bar items…";
 "Accessibility permission is required to list and move menu bar items." = "Accessibility permission is required to list and move menu bar items.";
 "Grant Accessibility to show names and move items." = "Grant Accessibility to show names and move items.";
+"Grant Accessibility and Screen Recording to show names and icons." = "Grant Accessibility and Screen Recording to show names and icons.";
 "No manageable menu bar items were found." = "No manageable menu bar items were found.";
 "Drop an item to apply the real menu bar position." = "Drop an item to apply the real menu bar position.";
 "Couldn't find a drop target in the menu bar." = "Couldn't find a drop target in the menu bar.";

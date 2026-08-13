@@ -96,7 +96,10 @@ enum MenuBarItemMover {
                     windowName: window.windowName,
                     appName: appName
                 ),
-                icon: captureIcon(windowNumber: window.windowNumber) ?? app?.icon,
+                icon: MenuBarItemPresentation.rowIcon(
+                    windowSnapshot: captureIcon(windowNumber: window.windowNumber),
+                    appIcon: app?.icon
+                ),
                 quartzRect: window.rect,
                 section: MenuBarItemPresentation.section(itemMidX: window.rect.midX, separatorMidX: separatorMidX)
             )
@@ -226,14 +229,23 @@ enum MenuBarItemMover {
     private static func captureIcon(windowNumber: Int) -> NSImage? {
         guard let windowID = CGWindowID(exactly: windowNumber) else { return nil }
         var pointer = UnsafeRawPointer(bitPattern: UInt(windowID))
-        guard let array = CFArrayCreate(nil, &pointer, 1, nil) else { return nil }
-        guard let image = CGImage(
-            windowListFromArrayScreenBounds: .null,
-            windowArray: array,
-            imageOption: [.boundsIgnoreFraming, .bestResolution]
-        ) else {
-            return nil
+        let fromList: CGImage?
+        if let array = CFArrayCreate(nil, &pointer, 1, nil) {
+            fromList = CGImage(
+                windowListFromArrayScreenBounds: .null,
+                windowArray: array,
+                imageOption: [.boundsIgnoreFraming, .bestResolution]
+            )
+        } else {
+            fromList = nil
         }
+        let image = fromList ?? CGWindowListCreateImage(
+            .null,
+            .optionIncludingWindow,
+            windowID,
+            [.boundsIgnoreFraming, .bestResolution]
+        )
+        guard let image else { return nil }
         return NSImage(cgImage: image, size: NSSize(width: 18, height: 18))
     }
 
