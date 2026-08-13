@@ -24,9 +24,10 @@ else
 fi
 
 step "展开 Hidden Bar 的左侧代理栏；不要按 Command。"
-step "只单击一个无法打开的镜像图标一次，不要移动或拖拽鼠标。"
+step "只单击一个刘海左侧镜像图标一次，不要移动或拖拽鼠标。"
 
-capture OPENED "对应菜单或界面是否成功打开？(y/n)"
+capture OPENED "对应菜单或界面是否在左侧打开？(y/n)"
+capture JUMPED "真实图标是否跑到刘海右侧？(y/n)"
 capture CURSOR_MOVED "单击后光标是否自行移开？(y/n)"
 
 sleep 0.2
@@ -40,6 +41,7 @@ NEW_LOG=$(tail -n "+$((START_LINE + 1))" "$LOG_PATH" | grep -F "$TAG" || true)
 
 printf '\n--- Captured ---\n'
 printf 'OPENED=%s\n' "$OPENED"
+printf 'JUMPED=%s\n' "$JUMPED"
 printf 'CURSOR_MOVED=%s\n' "$CURSOR_MOVED"
 printf '%s\n' "$NEW_LOG"
 
@@ -53,59 +55,41 @@ if ! grep -Fq 'classification=click' <<< "$NEW_LOG"; then
   exit 2
 fi
 
-if grep -Fq 'moveHiddenItem entered' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=unexpected_drag_path\n'
-fi
-
-if grep -Eq 'axMatch=|click pressReturned|click after100ms' <<< "$NEW_LOG" \
-  && ! grep -Eq 'moved=|click tempMove|nativeMove ' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=old_binary_still_running\n'
+if grep -Fq 'click tempMove' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=old_relocation_path_still_running\n'
   printf 'VERDICT=red\n'
   exit 1
 fi
 
-if grep -Fq 'click denied' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=accessibility_denied\n'
-  printf 'VERDICT=red\n'
-  exit 1
-fi
-
-if grep -Fq 'click noVisibleSlot' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=no_visible_slot\n'
-  printf 'VERDICT=red\n'
-  exit 1
-fi
-
-if grep -Fq 'click tempMoveFailed' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=temp_move_failed\n'
-  printf 'VERDICT=red\n'
-  exit 1
-fi
-
-if grep -Fq 'nativeMove retry' <<< "$NEW_LOG" && ! grep -Fq 'nativeMove ok' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=native_move_retry_exhausted\n'
-  printf 'VERDICT=red\n'
-  exit 1
-fi
-
-if ! grep -Eq 'click targetedEventsPosted|click tempMove' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=incomplete_click_trace\n'
+if ! grep -Fq 'click inPlaceBegin' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=incomplete_in_place_trace\n'
   exit 2
 fi
 
-if grep -Fq 'moved=true' <<< "$NEW_LOG" || grep -Fq 'nativeMove ok' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=relocated_then_clicked\n'
-elif grep -Fq 'moved=false' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=clicked_without_relocation\n'
+if grep -Fq 'jumped=true' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=native_item_jumped\n'
+fi
+
+if grep -Fq 'click inPlace menuVisible' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=in_place_menu_visible\n'
+elif grep -Fq 'click inPlace noMenu' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=in_place_no_menu\n'
 else
-  printf 'DIAGNOSTIC=relocation_trace_ambiguous\n'
-  exit 2
+  printf 'DIAGNOSTIC=in_place_menu_unconfirmed\n'
 fi
 
 case "$OPENED" in
   y|Y|yes|YES)
-    printf 'VERDICT=green\n'
-    exit 0
+    case "$JUMPED" in
+      n|N|no|NO)
+        printf 'VERDICT=green\n'
+        exit 0
+        ;;
+      *)
+        printf 'VERDICT=red\n'
+        exit 1
+        ;;
+    esac
     ;;
   *)
     printf 'VERDICT=red\n'

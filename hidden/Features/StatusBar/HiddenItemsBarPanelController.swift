@@ -97,7 +97,7 @@ final class HiddenItemsBarPanelController: NSObject {
 
     func show(
         capture: HiddenItemsBarCapture,
-        clickHandler: @escaping (HiddenItemsBarItem) -> Void,
+        clickHandler: @escaping (HiddenItemsBarItem, CGPoint) -> Void,
         dragHandler: @escaping (HiddenItemsBarItem, HiddenItemsBarItem, Bool) -> Void
     ) {
         contentView.prefersDarkBackground = capture.prefersDarkBackground
@@ -343,7 +343,7 @@ final class HiddenItemsBarView: NSView {
 
     private var items: [HiddenItemsBarItem] = []
     private var itemRects: [CGRect] = []
-    private var clickHandler: ((HiddenItemsBarItem) -> Void)?
+    private var clickHandler: ((HiddenItemsBarItem, CGPoint) -> Void)?
     private var dragHandler: ((HiddenItemsBarItem, HiddenItemsBarItem, Bool) -> Void)?
     private var mouseDownIndex: Int?
     private var mouseDownLocation = CGPoint.zero
@@ -362,7 +362,7 @@ final class HiddenItemsBarView: NSView {
 
     func configure(
         items: [HiddenItemsBarItem],
-        clickHandler: @escaping (HiddenItemsBarItem) -> Void,
+        clickHandler: @escaping (HiddenItemsBarItem, CGPoint) -> Void,
         dragHandler: @escaping (HiddenItemsBarItem, HiddenItemsBarItem, Bool) -> Void
     ) {
         self.items = items
@@ -434,12 +434,22 @@ final class HiddenItemsBarView: NSView {
             notchInteractionDebug(
                 "proxy mouseUp sourceIndex=\(sourceIndex) targetIndex=\(targetIndex) distance=\(distance) command=\(isCommandDrag) classification=click"
             )
-            clickHandler?(items[sourceIndex])
+            clickHandler?(items[sourceIndex], screenPointForItem(at: sourceIndex))
         } else {
             notchInteractionDebug(
                 "proxy mouseUp sourceIndex=\(sourceIndex) targetIndex=\(targetIndex) distance=\(distance) command=\(isCommandDrag) classification=ignored reason=differentTarget"
             )
         }
+    }
+
+    private func screenPointForItem(at index: Int) -> CGPoint {
+        let rects = itemRects.isEmpty ? layoutItemRects() : itemRects
+        guard rects.indices.contains(index), let window else {
+            return NSEvent.mouseLocation
+        }
+        let center = CGPoint(x: rects[index].midX, y: rects[index].midY)
+        let inWindow = convert(center, to: nil)
+        return window.convertToScreen(CGRect(origin: inWindow, size: .zero)).origin
     }
 
     private func layoutItemRects() -> [CGRect] {
