@@ -1418,7 +1418,7 @@ extension StatusBarController {
             guard
                 let sourceRect = currentQuartzRect(forMenuBarWindow: windowNumber),
                 let targetRect = currentQuartzRect(forMenuBarWindow: relation.targetWindowNumber),
-                let targetPID = ownerPID(forMenuBarWindow: relation.targetWindowNumber)
+                let targetPID = menuBarWindowOwnerPID(for: relation.targetWindowNumber)
             else {
                 notchInteractionDebug(
                     "nativeMove missingGeometry windowID=\(windowNumber) target=\(relation.targetWindowNumber) attempt=\(attempt)"
@@ -1667,7 +1667,7 @@ extension StatusBarController {
         .sorted { $0.quartzRect.minX < $1.quartzRect.minX }
     }
 
-    private func ownerPID(forMenuBarWindow windowNumber: Int) -> pid_t? {
+    private func menuBarWindowOwnerPID(for windowNumber: Int) -> pid_t? {
         orderedStatusWindows().first(where: { $0.windowNumber == windowNumber })?.sourcePID
     }
 
