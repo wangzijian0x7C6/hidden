@@ -61,21 +61,21 @@ if grep -Fq 'click tempMove' <<< "$NEW_LOG"; then
   exit 1
 fi
 
-if ! grep -Fq 'click inPlaceBegin' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=incomplete_in_place_trace\n'
+if ! grep -Fq 'click leftMoveBegin' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=incomplete_left_move_trace\n'
   exit 2
 fi
 
-if grep -Fq 'jumped=true' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=native_item_jumped\n'
+if grep -Fq 'landedOnLeft=false' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=cgs_move_did_not_land_left\n'
 fi
 
-if grep -Fq 'click inPlace menuVisible' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=in_place_menu_visible\n'
-elif grep -Fq 'click inPlace noMenu' <<< "$NEW_LOG"; then
-  printf 'DIAGNOSTIC=in_place_no_menu\n'
+if grep -Fq 'click leftMove menuVisible' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=left_move_menu_visible\n'
+elif grep -Fq 'click leftMove noMenu' <<< "$NEW_LOG"; then
+  printf 'DIAGNOSTIC=left_move_no_menu\n'
 else
-  printf 'DIAGNOSTIC=in_place_menu_unconfirmed\n'
+  printf 'DIAGNOSTIC=left_move_menu_unconfirmed\n'
 fi
 
 case "$OPENED" in

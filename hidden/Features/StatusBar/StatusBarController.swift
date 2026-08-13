@@ -30,6 +30,13 @@ private func CGSGetProcessMenuBarWindowList(
     _ count: inout Int32
 ) -> CGError
 
+@_silgen_name("CGSMoveWindow")
+private func CGSMoveWindow(
+    _ connection: CGSConnectionID,
+    _ windowID: CGWindowID,
+    _ origin: UnsafePointer<CGPoint>
+) -> CGError
+
 class StatusBarController {
     private typealias AccessibilityMenuBarItem = (element: AXUIElement, icon: NSImage, frame: CGRect)
 
@@ -1242,48 +1249,87 @@ extension StatusBarController {
 
         isNativeMenuBarMutationInFlight = true
         pendingNativeRestoreWorkItem?.cancel()
-        hiddenItemsBarController.hide()
 
         let eventPID = item.creatingPID
         let clickPoint = quartzPointFromAppKit(screenPoint)
         let nativeBefore = currentQuartzRect(forMenuBarWindow: item.windowNumber)
             ?? quartzRectFromAppKitRect(item.sourceRect)
+        let destinationOrigin = CGPoint(
+            x: clickPoint.x - nativeBefore.width / 2,
+            y: nativeBefore.minY
+        )
         notchInteractionDebug(
-            "click inPlaceBegin windowID=\(item.windowNumber) ownerPID=\(item.sourcePID) eventPID=\(eventPID) nativeRect=\(NSStringFromRect(nativeBefore)) clickPoint=\(NSStringFromPoint(clickPoint)) screen=\(NSStringFromRect(capture.screen.frame)) cursorBefore=\(cursorBefore.map { NSStringFromPoint($0) } ?? "nil")"
+            "click leftMoveBegin windowID=\(item.windowNumber) ownerPID=\(item.sourcePID) eventPID=\(eventPID) nativeRect=\(NSStringFromRect(nativeBefore)) dest=\(NSStringFromPoint(destinationOrigin)) clickPoint=\(NSStringFromPoint(clickPoint)) screen=\(NSStringFromRect(capture.screen.frame))"
         )
 
+        let moved = moveMenuBarWindow(item.windowNumber, to: destinationOrigin)
+        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+        let nativeAfterMove = currentQuartzRect(forMenuBarWindow: item.windowNumber) ?? nativeBefore
+        let landedOnLeft = abs(nativeAfterMove.midX - clickPoint.x) <= 12
+        notchInteractionDebug(
+            "click leftMoveAfter windowID=\(item.windowNumber) moved=\(moved) rect=\(NSStringFromRect(nativeAfterMove)) landedOnLeft=\(landedOnLeft)"
+        )
+
+        guard moved, landedOnLeft else {
+            _ = moveMenuBarWindow(item.windowNumber, to: nativeBefore.origin)
+            finishNativeMenuBarMutation(refreshProxy: false)
+            return
+        }
+
+        hiddenItemsBarController.hide()
         withHiddenCursor {
-            _ = postTargetedClick(windowNumber: item.windowNumber, eventPID: eventPID, at: clickPoint)
+            _ = postTargetedClick(
+                windowNumber: item.windowNumber,
+                eventPID: eventPID,
+                at: CGPoint(x: nativeAfterMove.midX, y: nativeAfterMove.midY)
+            )
         }
         if let cursorBefore {
             CGWarpMouseCursorPosition(cursorBefore)
         }
 
-        let nativeAfter = currentQuartzRect(forMenuBarWindow: item.windowNumber) ?? nativeBefore
-        notchInteractionDebug(
-            "click inPlaceAfter windowID=\(item.windowNumber) nativeRect=\(NSStringFromRect(nativeAfter)) jumped=\(abs(nativeAfter.minX - nativeBefore.minX) > 1)"
-        )
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self else { return }
             if self.hasPopupMenu(ownedBy: eventPID) {
-                notchInteractionDebug("click inPlace menuVisible windowID=\(item.windowNumber)")
-                self.waitToRestoreProxy(whileMenuOwnedBy: eventPID, attempt: 0)
+                notchInteractionDebug("click leftMove menuVisible windowID=\(item.windowNumber)")
+                self.waitToRestoreLeftMovedWindow(
+                    windowNumber: item.windowNumber,
+                    origin: nativeBefore.origin,
+                    pid: eventPID,
+                    attempt: 0
+                )
             } else {
-                notchInteractionDebug("click inPlace noMenu windowID=\(item.windowNumber)")
+                notchInteractionDebug("click leftMove noMenu windowID=\(item.windowNumber)")
+                _ = self.moveMenuBarWindow(item.windowNumber, to: nativeBefore.origin)
                 self.finishNativeMenuBarMutation(refreshProxy: true)
             }
         }
     }
 
-    private func waitToRestoreProxy(whileMenuOwnedBy pid: pid_t, attempt: Int) {
+    private func waitToRestoreLeftMovedWindow(windowNumber: Int, origin: CGPoint, pid: pid_t, attempt: Int) {
         if hasPopupMenu(ownedBy: pid), attempt < 40 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                self?.waitToRestoreProxy(whileMenuOwnedBy: pid, attempt: attempt + 1)
+                self?.waitToRestoreLeftMovedWindow(
+                    windowNumber: windowNumber,
+                    origin: origin,
+                    pid: pid,
+                    attempt: attempt + 1
+                )
             }
             return
         }
+        _ = moveMenuBarWindow(windowNumber, to: origin)
         finishNativeMenuBarMutation(refreshProxy: true)
+    }
+
+    private func moveMenuBarWindow(_ windowNumber: Int, to origin: CGPoint) -> Bool {
+        guard let windowID = CGWindowID(exactly: windowNumber) else { return false }
+        var point = origin
+        let result = CGSMoveWindow(CGSMainConnectionID(), windowID, &point)
+        notchInteractionDebug(
+            "cgsMove windowID=\(windowNumber) origin=\(NSStringFromPoint(origin)) result=\(result.rawValue)"
+        )
+        return result == .success
     }
 
     private func hasPopupMenu(ownedBy pid: pid_t) -> Bool {
