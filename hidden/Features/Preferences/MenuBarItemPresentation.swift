@@ -109,7 +109,7 @@ enum MenuBarItemPresentation {
             abs((lhs.x + lhs.width / 2) - itemMidX) < abs((rhs.x + rhs.width / 2) - itemMidX)
         }.flatMap { extra in
             let extraMid = extra.x + extra.width / 2
-            abs(extraMid - itemMidX) < max(36, extra.width) ? cleaned(extra.title) : nil
+            return abs(extraMid - itemMidX) < max(36, extra.width) ? cleaned(extra.title) : nil
         }
     }
 }
