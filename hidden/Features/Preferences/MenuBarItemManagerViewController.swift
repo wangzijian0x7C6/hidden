@@ -264,7 +264,8 @@ extension MenuBarItemManagerViewController: NSTableViewDataSource, NSTableViewDe
         let cell = NSTableCellView()
         let imageView = NSImageView()
         imageView.image = item.icon
-        imageView.imageScaling = .scaleProportionallyDown
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.contentTintColor = .labelColor
         let label = NSTextField(labelWithString: item.primaryName)
         label.lineBreakMode = .byTruncatingTail
         label.font = .systemFont(ofSize: NSFont.systemFontSize)

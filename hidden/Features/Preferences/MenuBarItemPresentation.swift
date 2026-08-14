@@ -36,6 +36,28 @@ enum MenuBarItemPresentation {
         cleaned(axTitle) ?? cleaned(windowName) ?? appName
     }
 
+    static func axName(title: String?, description: String?, identifier: String? = nil) -> String? {
+        let titleName = cleaned(title).map(shortName)
+        let descriptionName = cleaned(description).map(shortName)
+        if let descriptionName, titleName == nil || isGenericSystemName(titleName!) {
+            return descriptionName
+        }
+        if let titleName, !isGenericSystemName(titleName) {
+            return titleName
+        }
+        return cleaned(identifier)
+    }
+
+    static func shortName(_ value: String) -> String {
+        let head = value.split(whereSeparator: { "，,、".contains($0) }).first.map(String.init)
+        return (head ?? value).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func isGenericSystemName(_ value: String) -> Bool {
+        let lowered = value.lowercased()
+        return lowered == "control center" || value == "控制中心"
+    }
+
     static func cleaned(_ raw: String?) -> String? {
         guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
               !value.isEmpty,
@@ -82,7 +104,9 @@ enum MenuBarItemPresentation {
     }
 
     static func rowIcon(windowSnapshot: NSImage?, appIcon _: NSImage?) -> NSImage? {
-        windowSnapshot
+        guard let windowSnapshot else { return nil }
+        windowSnapshot.isTemplate = true
+        return windowSnapshot
     }
 
     static func matchedTitles(
@@ -98,7 +122,20 @@ enum MenuBarItemPresentation {
             }
             return result
         }
-        return itemMidXs.map { matchedTitle(itemMidX: $0, extras: extras) }
+
+        var result = [String?](repeating: nil, count: itemMidXs.count)
+        var used = Set<Int>()
+        for extra in sortedExtras {
+            let extraMid = extra.x + extra.width / 2
+            guard let name = cleaned(extra.title) else { continue }
+            let nearest = itemMidXs.enumerated()
+                .filter { !used.contains($0.offset) }
+                .min { abs($0.element - extraMid) < abs($1.element - extraMid) }
+            guard let nearest, abs(nearest.element - extraMid) < max(36, extra.width) else { continue }
+            used.insert(nearest.offset)
+            result[nearest.offset] = name
+        }
+        return result
     }
 
     static func matchedTitle(

@@ -114,6 +114,30 @@ final class MenuBarItemPresentationTests: XCTestCase {
         XCTAssertEqual(titles, ["Wi-Fi", "Battery"])
     }
 
+    func testPrefersDescriptionWhenTitleIsControlCenter() {
+        XCTAssertEqual(
+            MenuBarItemPresentation.axName(title: "控制中心", description: "Wi-Fi，已接入，3格"),
+            "Wi-Fi"
+        )
+        XCTAssertEqual(
+            MenuBarItemPresentation.axName(title: "Control Center", description: "Battery, 80%"),
+            "Battery"
+        )
+        XCTAssertEqual(
+            MenuBarItemPresentation.shortName("播放中，音乐"),
+            "播放中"
+        )
+    }
+
+    func testDoesNotAssignTheSameExtraToTwoItems() {
+        let titles = MenuBarItemPresentation.matchedTitles(
+            itemMidXs: [100, 108],
+            extras: [(title: "Wi-Fi", x: 90, width: 20)]
+        )
+        XCTAssertEqual(titles.compactMap { $0 }.count, 1)
+        XCTAssertEqual(titles.compactMap { $0 }.first, "Wi-Fi")
+    }
+
     func testSectionSplitsOnSeparator() {
         XCTAssertEqual(MenuBarItemPresentation.section(itemMidX: 700, separatorMidX: 798), .hidden)
         XCTAssertEqual(MenuBarItemPresentation.section(itemMidX: 900, separatorMidX: 798), .visible)

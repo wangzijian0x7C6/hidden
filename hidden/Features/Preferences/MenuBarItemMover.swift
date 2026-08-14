@@ -239,9 +239,15 @@ enum MenuBarItemMover {
                       size.width > 2
                 else { continue }
                 let title = axString(kAXTitleAttribute as CFString, of: element)
-                    ?? axString(kAXDescriptionAttribute as CFString, of: element)
-                    ?? ""
-                result[pid, default: []].append((title, position.x, size.width))
+                let description = axString(kAXDescriptionAttribute as CFString, of: element)
+                    ?? axString(kAXHelpAttribute as CFString, of: element)
+                let identifier = axString("AXIdentifier" as CFString, of: element)
+                guard let name = MenuBarItemPresentation.axName(
+                    title: title,
+                    description: description,
+                    identifier: identifier
+                ) else { continue }
+                result[pid, default: []].append((name, position.x, size.width))
             }
         }
         return result
