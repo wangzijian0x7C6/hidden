@@ -55,7 +55,14 @@ enum MenuBarItemPresentation {
 
     static func isGenericSystemName(_ value: String) -> Bool {
         let lowered = value.lowercased()
-        return lowered == "control center" || value == "控制中心"
+        return lowered == "control center"
+            || lowered == "unknown"
+            || value == "控制中心"
+            || value == "未知"
+    }
+
+    static func isComplete(title: String, hasIcon: Bool) -> Bool {
+        hasIcon && !isGenericSystemName(title)
     }
 
     static func cleaned(_ raw: String?) -> String? {

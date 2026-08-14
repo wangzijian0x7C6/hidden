@@ -25,6 +25,7 @@
 "Grant Accessibility to show names and move items." = "授予辅助功能权限后才能显示名称并移动图标。";
 "Grant Accessibility and Screen Recording to show names and icons." = "授予辅助功能和屏幕录制权限后才能显示名称和图标。";
 "No manageable menu bar items were found." = "没有找到可管理的菜单栏图标。";
+"No identifiable menu bar items were found." = "没有识别到带名称和图标的菜单栏项。";
 "Drop an item to apply the real menu bar position." = "拖放图标以应用到真实菜单栏位置。";
 "Couldn't find a drop target in the menu bar." = "找不到菜单栏中的放置位置。";
 "Moving %@…" = "正在移动 %@…";

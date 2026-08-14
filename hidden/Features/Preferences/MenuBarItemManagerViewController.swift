@@ -194,19 +194,14 @@ final class MenuBarItemManagerViewController: NSViewController {
         visibleTable.reloadData()
         hiddenCountLabel.stringValue = "\(hiddenItems.count)"
         visibleCountLabel.stringValue = "\(visibleItems.count)"
-        let hasIcons = items.contains { $0.icon != nil }
         let needsAX = !accessibilityTrusted
-        let needsScreen = !hasIcons
+        let needsScreen = !CGPreflightScreenCaptureAccess()
         permissionButton.isHidden = !needsAX && !needsScreen
-        if items.isEmpty, needsAX {
-            statusLabel.stringValue = "Accessibility permission is required to list and move menu bar items.".localized
-        } else if needsAX {
-            statusLabel.stringValue = "Grant Accessibility to show names and move items.".localized
-        } else if needsScreen {
+        if needsAX || needsScreen {
             statusLabel.stringValue = "Grant Accessibility and Screen Recording to show names and icons.".localized
         } else {
             statusLabel.stringValue = items.isEmpty
-                ? "No manageable menu bar items were found.".localized
+                ? "No identifiable menu bar items were found.".localized
                 : "Drop an item to apply the real menu bar position.".localized
         }
         isBusy = false
