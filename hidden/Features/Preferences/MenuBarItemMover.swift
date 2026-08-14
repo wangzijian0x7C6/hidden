@@ -72,9 +72,14 @@ enum MenuBarItemMover {
             return (pid, windowNumber, rect, ownerName, windowName)
         }
 
+        let runningPids = NSWorkspace.shared.runningApplications.compactMap { app -> pid_t? in
+            let pid = app.processIdentifier
+            return pid == 0 || pid == ownPID ? nil : pid
+        }
         let axTitles = extraTitles(
             for: MenuBarItemPresentation.accessibilityPidsToScan(
                 extraPids: windows.map(\.pid),
+                runningPids: runningPids,
                 trusted: AXIsProcessTrusted()
             )
         )
@@ -84,28 +89,23 @@ enum MenuBarItemMover {
         )
         let separatorMidX = layout.separatorFrame.midX
 
-        return windows.enumerated().compactMap { index, window in
+        return windows.enumerated().map { index, window in
             let app = apps[window.pid]
             let appName = app?.localizedName ?? window.ownerName ?? "Unknown".localized
-            let title = MenuBarItemPresentation.displayName(
-                axTitle: titles[index],
-                windowName: window.windowName,
-                appName: appName
-            )
-            let icon = MenuBarItemPresentation.rowIcon(
-                windowSnapshot: captureIcon(windowNumber: window.windowNumber),
-                appIcon: app?.icon
-            )
-            guard MenuBarItemPresentation.isComplete(title: title, hasIcon: icon != nil) else {
-                return nil
-            }
             return ManagedMenuBarItem(
                 id: "\(window.pid)-\(window.windowNumber)",
                 windowNumber: window.windowNumber,
                 pid: window.pid,
                 appName: appName,
-                title: title,
-                icon: icon,
+                title: MenuBarItemPresentation.displayName(
+                    axTitle: titles[index],
+                    windowName: window.windowName,
+                    appName: appName
+                ),
+                icon: MenuBarItemPresentation.rowIcon(
+                    windowSnapshot: captureIcon(windowNumber: window.windowNumber),
+                    appIcon: app?.icon
+                ),
                 quartzRect: window.rect,
                 section: MenuBarItemPresentation.section(itemMidX: window.rect.midX, separatorMidX: separatorMidX)
             )
@@ -291,7 +291,9 @@ enum MenuBarItemMover {
             [.boundsIgnoreFraming, .bestResolution]
         )
         guard let image else { return nil }
-        return NSImage(cgImage: image, size: NSSize(width: 18, height: 18))
+        let nsImage = NSImage(cgImage: image, size: NSSize(width: 22, height: 22))
+        nsImage.isTemplate = false
+        return nsImage
     }
 
     private static func axPoint(_ attribute: CFString, of element: AXUIElement) -> CGPoint? {

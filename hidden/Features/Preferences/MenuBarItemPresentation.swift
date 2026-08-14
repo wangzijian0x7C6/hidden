@@ -61,10 +61,6 @@ enum MenuBarItemPresentation {
             || value == "未知"
     }
 
-    static func isComplete(title: String, hasIcon: Bool) -> Bool {
-        hasIcon && !isGenericSystemName(title)
-    }
-
     static func cleaned(_ raw: String?) -> String? {
         guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
               !value.isEmpty,
@@ -105,15 +101,13 @@ enum MenuBarItemPresentation {
         itemMidX < separatorMidX ? .hidden : .visible
     }
 
-    static func accessibilityPidsToScan(extraPids: [pid_t], trusted: Bool) -> [pid_t] {
+    static func accessibilityPidsToScan(extraPids: [pid_t], runningPids: [pid_t] = [], trusted: Bool) -> [pid_t] {
         guard trusted else { return [] }
-        return Array(Set(extraPids)).sorted()
+        return Array(Set(extraPids + runningPids)).sorted()
     }
 
     static func rowIcon(windowSnapshot: NSImage?, appIcon _: NSImage?) -> NSImage? {
-        guard let windowSnapshot else { return nil }
-        windowSnapshot.isTemplate = true
-        return windowSnapshot
+        windowSnapshot
     }
 
     static func matchedTitles(

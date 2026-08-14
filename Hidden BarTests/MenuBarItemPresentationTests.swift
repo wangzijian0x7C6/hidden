@@ -51,6 +51,10 @@ final class MenuBarItemPresentationTests: XCTestCase {
             MenuBarItemPresentation.accessibilityPidsToScan(extraPids: [22, 11, 22], trusted: true),
             [11, 22]
         )
+        XCTAssertEqual(
+            MenuBarItemPresentation.accessibilityPidsToScan(extraPids: [11], runningPids: [22, 11], trusted: true),
+            [11, 22]
+        )
     }
 
     func testDropsOwnProcessAndOversizedWindows() {
@@ -146,12 +150,5 @@ final class MenuBarItemPresentationTests: XCTestCase {
     func testDoesNotFallBackToSharedAppIcon() {
         let appIcon = NSImage(size: NSSize(width: 16, height: 16))
         XCTAssertNil(MenuBarItemPresentation.rowIcon(windowSnapshot: nil, appIcon: appIcon))
-    }
-
-    func testHidesUnidentifiedControlCenterRows() {
-        XCTAssertFalse(MenuBarItemPresentation.isComplete(title: "控制中心", hasIcon: true))
-        XCTAssertFalse(MenuBarItemPresentation.isComplete(title: "Wi-Fi", hasIcon: false))
-        XCTAssertTrue(MenuBarItemPresentation.isComplete(title: "Wi-Fi", hasIcon: true))
-        XCTAssertTrue(MenuBarItemPresentation.isComplete(title: "微信", hasIcon: true))
     }
 }

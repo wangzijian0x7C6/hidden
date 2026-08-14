@@ -260,7 +260,9 @@ extension MenuBarItemManagerViewController: NSTableViewDataSource, NSTableViewDe
         let imageView = NSImageView()
         imageView.image = item.icon
         imageView.imageScaling = .scaleProportionallyUpOrDown
-        imageView.contentTintColor = .labelColor
+        imageView.wantsLayer = true
+        imageView.layer?.backgroundColor = NSColor.quaternaryLabelColor.cgColor
+        imageView.layer?.cornerRadius = 4
         let label = NSTextField(labelWithString: item.primaryName)
         label.lineBreakMode = .byTruncatingTail
         label.font = .systemFont(ofSize: NSFont.systemFontSize)
@@ -271,8 +273,8 @@ extension MenuBarItemManagerViewController: NSTableViewDataSource, NSTableViewDe
         stack.translatesAutoresizingMaskIntoConstraints = false
         cell.addSubview(stack)
         NSLayoutConstraint.activate([
-            imageView.widthAnchor.constraint(equalToConstant: 18),
-            imageView.heightAnchor.constraint(equalToConstant: 18),
+            imageView.widthAnchor.constraint(equalToConstant: 22),
+            imageView.heightAnchor.constraint(equalToConstant: 22),
             stack.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 6),
             stack.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
             stack.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
