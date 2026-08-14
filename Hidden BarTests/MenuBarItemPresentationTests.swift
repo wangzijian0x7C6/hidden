@@ -151,4 +151,10 @@ final class MenuBarItemPresentationTests: XCTestCase {
         let appIcon = NSImage(size: NSSize(width: 16, height: 16))
         XCTAssertNil(MenuBarItemPresentation.rowIcon(windowSnapshot: nil, appIcon: appIcon))
     }
+
+    func testHidesGenericRowsUntilAnIconExists() {
+        XCTAssertTrue(MenuBarItemPresentation.isPlaceholderRow(title: "控制中心", hasIcon: false))
+        XCTAssertFalse(MenuBarItemPresentation.isPlaceholderRow(title: "控制中心", hasIcon: true))
+        XCTAssertFalse(MenuBarItemPresentation.isPlaceholderRow(title: "Wi-Fi", hasIcon: false))
+    }
 }

@@ -89,23 +89,31 @@ enum MenuBarItemMover {
         )
         let separatorMidX = layout.separatorFrame.midX
 
-        return windows.enumerated().map { index, window in
+        let canCapture = CGPreflightScreenCaptureAccess()
+        return windows.enumerated().compactMap { index, window in
             let app = apps[window.pid]
             let appName = app?.localizedName ?? window.ownerName ?? "Unknown".localized
+            let title = MenuBarItemPresentation.displayName(
+                axTitle: titles[index],
+                windowName: window.windowName,
+                appName: appName
+            )
+            let icon = canCapture
+                ? MenuBarItemPresentation.rowIcon(
+                    windowSnapshot: captureIcon(windowNumber: window.windowNumber),
+                    appIcon: app?.icon
+                )
+                : nil
+            guard !MenuBarItemPresentation.isPlaceholderRow(title: title, hasIcon: icon != nil) else {
+                return nil
+            }
             return ManagedMenuBarItem(
                 id: "\(window.pid)-\(window.windowNumber)",
                 windowNumber: window.windowNumber,
                 pid: window.pid,
                 appName: appName,
-                title: MenuBarItemPresentation.displayName(
-                    axTitle: titles[index],
-                    windowName: window.windowName,
-                    appName: appName
-                ),
-                icon: MenuBarItemPresentation.rowIcon(
-                    windowSnapshot: captureIcon(windowNumber: window.windowNumber),
-                    appIcon: app?.icon
-                ),
+                title: title,
+                icon: icon,
                 quartzRect: window.rect,
                 section: MenuBarItemPresentation.section(itemMidX: window.rect.midX, separatorMidX: separatorMidX)
             )

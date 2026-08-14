@@ -61,6 +61,10 @@ enum MenuBarItemPresentation {
             || value == "未知"
     }
 
+    static func isPlaceholderRow(title: String, hasIcon: Bool) -> Bool {
+        !hasIcon && isGenericSystemName(title)
+    }
+
     static func cleaned(_ raw: String?) -> String? {
         guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
               !value.isEmpty,
