@@ -21,6 +21,22 @@ final class MenuBarItemPresentationTests: XCTestCase {
             MenuBarItemPresentation.displayName(axTitle: " ", windowName: "-", appName: "Things"),
             "Things"
         )
+        XCTAssertEqual(
+            MenuBarItemPresentation.displayName(axTitle: nil, windowName: "BentoBox-0", appName: "Control Center"),
+            "Control Center"
+        )
+        XCTAssertEqual(
+            MenuBarItemPresentation.displayName(axTitle: nil, windowName: "com.tencent.token-dashboard.main", appName: "QQ"),
+            "QQ"
+        )
+        XCTAssertEqual(
+            MenuBarItemPresentation.displayName(axTitle: nil, windowName: "AudioVideoModule", appName: "Control Center"),
+            NSLocalizedString("Sound", comment: "")
+        )
+        XCTAssertEqual(
+            MenuBarItemPresentation.displayName(axTitle: nil, windowName: "NowPlaying", appName: "Control Center"),
+            NSLocalizedString("Now Playing", comment: "")
+        )
     }
 
     func testSkipsAccessibilityWhenUntrusted() {
@@ -65,6 +81,37 @@ final class MenuBarItemPresentationTests: XCTestCase {
                 height: 29
             )
         )
+        XCTAssertFalse(
+            MenuBarItemPresentation.isManageableExtra(
+                ownerPID: 12,
+                ownPID: 99,
+                layer: 25,
+                width: 31,
+                height: 29,
+                windowName: "hiddenbar_separate"
+            )
+        )
+        XCTAssertFalse(
+            MenuBarItemPresentation.isManageableExtra(
+                ownerPID: 12,
+                ownPID: 99,
+                layer: 25,
+                width: 31,
+                height: 29,
+                ownerName: "Hidden Bar"
+            )
+        )
+    }
+
+    func testMatchesTitlesBySortedOrderWhenCountsAlign() {
+        let titles = MenuBarItemPresentation.matchedTitles(
+            itemMidXs: [120, 80],
+            extras: [
+                (title: "Battery", x: 70, width: 20),
+                (title: "Wi-Fi", x: 110, width: 20)
+            ]
+        )
+        XCTAssertEqual(titles, ["Wi-Fi", "Battery"])
     }
 
     func testSectionSplitsOnSeparator() {

@@ -29,6 +29,16 @@
 "Couldn't find a drop target in the menu bar." = "找不到菜单栏中的放置位置。";
 "Moving %@…" = "正在移动 %@…";
 "Couldn't move that item. Try again after refreshing." = "无法移动该图标，请刷新后再试。";
+"Sound" = "声音";
+"Now Playing" = "正在播放";
+"Wi-Fi" = "Wi-Fi";
+"Battery" = "电池";
+"Focus" = "专注模式";
+"Display" = "显示器";
+"Notifications" = "通知";
+"Screen Mirroring" = "屏幕镜像";
+"Music Recognition" = "音乐识别";
+"Keyboard Brightness" = "键盘亮度";
 "Tutorial text" = "
 使用 '持续隐藏' 功能让您的菜单栏保持整洁。这个教程将会帮助您设置这个功能。
 

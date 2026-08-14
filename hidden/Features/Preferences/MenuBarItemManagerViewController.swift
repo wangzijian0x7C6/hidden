@@ -35,7 +35,18 @@ final class MenuBarItemManagerViewController: NSViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidBecomeActive),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
         refresh()
+    }
+
+    override func viewDidDisappear() {
+        super.viewDidDisappear()
+        NotificationCenter.default.removeObserver(self, name: NSApplication.didBecomeActiveNotification, object: nil)
     }
 
     private func buildUI() {
@@ -139,11 +150,23 @@ final class MenuBarItemManagerViewController: NSViewController {
         refresh()
     }
 
+    @objc private func appDidBecomeActive() {
+        guard view.window?.isVisible == true else { return }
+        refresh()
+    }
+
     @objc private func permissionPressed() {
         let prompt = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
         AXIsProcessTrustedWithOptions(prompt)
         if !CGPreflightScreenCaptureAccess() {
             _ = CGRequestScreenCaptureAccess()
+        }
+        let settings = [
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        ]
+        for string in settings {
+            if let url = URL(string: string), NSWorkspace.shared.open(url) { break }
         }
         statusLabel.stringValue = "Enable Hidden Bar in System Settings, then return and refresh.".localized
     }
@@ -153,22 +176,14 @@ final class MenuBarItemManagerViewController: NSViewController {
         isBusy = true
         refreshButton.isEnabled = false
         statusLabel.stringValue = "Scanning menu bar items…".localized
-        if !CGPreflightScreenCaptureAccess() {
-            _ = CGRequestScreenCaptureAccess()
-        }
         appDelegate.statusBarController.prepareForItemManagement { [weak self] layout in
             guard let self else { return }
             self.layout = layout
             let ownPID = ProcessInfo.processInfo.processIdentifier
             self.separatorWindowNumber = MenuBarItemMover.windowNumber(ownedBy: ownPID, nearestAppKitFrame: layout.separatorFrame)
             self.expandCollapseWindowNumber = MenuBarItemMover.windowNumber(ownedBy: ownPID, nearestAppKitFrame: layout.expandCollapseFrame)
-            DispatchQueue.global(qos: .userInitiated).async {
-                let items = MenuBarItemMover.extras(layout: layout)
-                let trusted = AXIsProcessTrusted()
-                DispatchQueue.main.async {
-                    self.apply(items, accessibilityTrusted: trusted)
-                }
-            }
+            let items = MenuBarItemMover.extras(layout: layout)
+            self.apply(items, accessibilityTrusted: AXIsProcessTrusted())
         }
     }
 
@@ -179,11 +194,15 @@ final class MenuBarItemManagerViewController: NSViewController {
         visibleTable.reloadData()
         hiddenCountLabel.stringValue = "\(hiddenItems.count)"
         visibleCountLabel.stringValue = "\(visibleItems.count)"
-        let needsAccess = !accessibilityTrusted || !CGPreflightScreenCaptureAccess()
-        permissionButton.isHidden = !needsAccess
-        if items.isEmpty, !accessibilityTrusted {
+        let hasIcons = items.contains { $0.icon != nil }
+        let needsAX = !accessibilityTrusted
+        let needsScreen = !hasIcons
+        permissionButton.isHidden = !needsAX && !needsScreen
+        if items.isEmpty, needsAX {
             statusLabel.stringValue = "Accessibility permission is required to list and move menu bar items.".localized
-        } else if needsAccess {
+        } else if needsAX {
+            statusLabel.stringValue = "Grant Accessibility to show names and move items.".localized
+        } else if needsScreen {
             statusLabel.stringValue = "Grant Accessibility and Screen Recording to show names and icons.".localized
         } else {
             statusLabel.stringValue = items.isEmpty

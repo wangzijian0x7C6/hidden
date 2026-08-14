@@ -29,6 +29,16 @@
 "Couldn't find a drop target in the menu bar." = "Couldn't find a drop target in the menu bar.";
 "Moving %@…" = "Moving %@…";
 "Couldn't move that item. Try again after refreshing." = "Couldn't move that item. Try again after refreshing.";
+"Sound" = "Sound";
+"Now Playing" = "Now Playing";
+"Wi-Fi" = "Wi-Fi";
+"Battery" = "Battery";
+"Focus" = "Focus";
+"Display" = "Display";
+"Notifications" = "Notifications";
+"Screen Mirroring" = "Screen Mirroring";
+"Music Recognition" = "Music Recognition";
+"Keyboard Brightness" = "Keyboard Brightness";
 "Tutorial text" = "
 Use the always hidden feature to keep your icons tidy. Here's how to set it
 Steps to enable:

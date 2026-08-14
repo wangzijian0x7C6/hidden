@@ -50,28 +50,26 @@ enum MenuBarItemMover {
             }
         )
         let windows = menuBarWindows().compactMap { info -> (pid: pid_t, windowNumber: Int, rect: CGRect, ownerName: String?, windowName: String?)? in
+            let windowName = info[kCGWindowName as String] as? String
+            let ownerName = info[kCGWindowOwnerName as String] as? String
             guard
-                let pid = info[kCGWindowOwnerPID as String] as? pid_t,
-                let windowNumber = info[kCGWindowNumber as String] as? Int,
+                let pid = intValue(info[kCGWindowOwnerPID as String]).map(pid_t.init),
+                let windowNumber = intValue(info[kCGWindowNumber as String]),
                 let bounds = info[kCGWindowBounds as String] as? [String: Any],
                 let rect = rect(from: bounds),
                 MenuBarItemPresentation.isManageableExtra(
                     ownerPID: pid,
                     ownPID: ownPID,
-                    layer: info[kCGWindowLayer as String] as? Int,
+                    layer: intValue(info[kCGWindowLayer as String]),
                     width: rect.width,
-                    height: rect.height
+                    height: rect.height,
+                    windowName: windowName,
+                    ownerName: ownerName
                 )
             else {
                 return nil
             }
-            return (
-                pid,
-                windowNumber,
-                rect,
-                info[kCGWindowOwnerName as String] as? String,
-                info[kCGWindowName as String] as? String
-            )
+            return (pid, windowNumber, rect, ownerName, windowName)
         }
 
         let axTitles = extraTitles(
@@ -80,12 +78,20 @@ enum MenuBarItemMover {
                 trusted: AXIsProcessTrusted()
             )
         )
+        let titlesByPID = Dictionary(grouping: windows, by: \.pid).mapValues { group in
+            MenuBarItemPresentation.matchedTitles(
+                itemMidXs: group.map(\.rect.midX),
+                extras: axTitles[group[0].pid] ?? []
+            )
+        }
         let separatorMidX = layout.separatorFrame.midX
 
-        return windows.map { window in
+        return windows.enumerated().map { index, window in
+            let siblings = windows.enumerated().filter { $0.element.pid == window.pid }
+            let siblingIndex = siblings.firstIndex { $0.offset == index } ?? 0
             let app = apps[window.pid]
             let appName = app?.localizedName ?? window.ownerName ?? "Unknown".localized
-            let axTitle = matchedTitle(in: axTitles[window.pid] ?? [], rect: window.rect)
+            let axTitle = titlesByPID[window.pid]?[siblingIndex]
             return ManagedMenuBarItem(
                 id: "\(window.pid)-\(window.windowNumber)",
                 windowNumber: window.windowNumber,
@@ -110,8 +116,8 @@ enum MenuBarItemMover {
     static func windowNumber(ownedBy pid: pid_t, nearestAppKitFrame frame: CGRect) -> Int? {
         menuBarWindows().compactMap { info -> (Int, CGFloat)? in
             guard
-                (info[kCGWindowOwnerPID as String] as? pid_t) == pid,
-                let windowNumber = info[kCGWindowNumber as String] as? Int,
+                intValue(info[kCGWindowOwnerPID as String]).map(pid_t.init) == pid,
+                let windowNumber = intValue(info[kCGWindowNumber as String]),
                 let bounds = info[kCGWindowBounds as String] as? [String: Any],
                 let rect = rect(from: bounds)
             else {
@@ -179,7 +185,7 @@ enum MenuBarItemMover {
     }
 
     private static func currentRect(windowNumber: Int) -> CGRect? {
-        menuBarWindows().first { ($0[kCGWindowNumber as String] as? Int) == windowNumber }
+        menuBarWindows().first { intValue($0[kCGWindowNumber as String]) == windowNumber }
             .flatMap { info in
                 guard let bounds = info[kCGWindowBounds as String] as? [String: Any] else { return nil }
                 return rect(from: bounds)
@@ -188,14 +194,29 @@ enum MenuBarItemMover {
 
     private static func rect(from bounds: [String: Any]) -> CGRect? {
         guard
-            let x = bounds["X"] as? CGFloat,
-            let y = bounds["Y"] as? CGFloat,
-            let w = bounds["Width"] as? CGFloat,
-            let h = bounds["Height"] as? CGFloat
+            let x = cgFloat(bounds["X"]),
+            let y = cgFloat(bounds["Y"]),
+            let w = cgFloat(bounds["Width"]),
+            let h = cgFloat(bounds["Height"])
         else {
             return nil
         }
         return CGRect(x: x, y: y, width: w, height: h)
+    }
+
+    private static func intValue(_ raw: Any?) -> Int? {
+        if let value = raw as? Int { return value }
+        if let value = raw as? Int32 { return Int(value) }
+        if let value = raw as? Int64 { return Int(value) }
+        if let value = raw as? NSNumber { return value.intValue }
+        return nil
+    }
+
+    private static func cgFloat(_ raw: Any?) -> CGFloat? {
+        if let value = raw as? CGFloat { return value }
+        if let value = raw as? Double { return CGFloat(value) }
+        if let value = raw as? NSNumber { return CGFloat(truncating: value) }
+        return nil
     }
 
     private static func extraTitles(for pids: [pid_t]) -> [pid_t: [(title: String, x: CGFloat, width: CGFloat)]] {
@@ -247,14 +268,6 @@ enum MenuBarItemMover {
         )
         guard let image else { return nil }
         return NSImage(cgImage: image, size: NSSize(width: 18, height: 18))
-    }
-
-    private static func matchedTitle(in extras: [(title: String, x: CGFloat, width: CGFloat)], rect: CGRect) -> String? {
-        extras.min { lhs, rhs in
-            abs((lhs.x + lhs.width / 2) - rect.midX) < abs((rhs.x + rhs.width / 2) - rect.midX)
-        }.flatMap { extra in
-            abs((extra.x + extra.width / 2) - rect.midX) < max(12, extra.width) ? extra.title : nil
-        }
     }
 
     private static func axPoint(_ attribute: CFString, of element: AXUIElement) -> CGPoint? {
