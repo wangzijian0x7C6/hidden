@@ -33,7 +33,14 @@ enum MenuBarItemPresentation {
     ]
 
     static func displayName(axTitle: String?, windowName: String?, appName: String) -> String {
-        cleaned(axTitle) ?? cleaned(windowName) ?? appName
+        if isSystemExtraOwner(appName) {
+            return cleaned(axTitle) ?? cleaned(windowName).map(titleCaseIdentifier) ?? appName
+        }
+        return appName
+    }
+
+    static func isSystemExtraOwner(_ appName: String) -> Bool {
+        isGenericSystemName(appName) || appName == "SystemUIServer" || appName == "Control Centre"
     }
 
     static func axName(title: String?, description: String?, identifier: String? = nil) -> String? {
@@ -53,6 +60,10 @@ enum MenuBarItemPresentation {
         return (head ?? value).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    static func titleCaseIdentifier(_ value: String) -> String {
+        value.replacingOccurrences(of: "([a-z]{2})([A-Z])", with: "$1 $2", options: .regularExpression)
+    }
+
     static func isGenericSystemName(_ value: String) -> Bool {
         let lowered = value.lowercased()
         return lowered == "control center"
@@ -61,18 +72,20 @@ enum MenuBarItemPresentation {
             || value == "未知"
     }
 
-    static func isPlaceholderRow(title: String, hasIcon: Bool) -> Bool {
-        !hasIcon && isGenericSystemName(title)
-    }
-
     static func cleaned(_ raw: String?) -> String? {
         guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
               !value.isEmpty,
               value != "-",
               !value.hasPrefix("Item-"),
               !value.hasPrefix("hiddenbar_"),
-              !value.hasPrefix("BentoBox")
+              !value.hasPrefix("BentoBox"),
+              !value.allSatisfy(\.isNumber),
+              !value.contains("_")
         else {
+            return nil
+        }
+        let lowered = value.lowercased()
+        if lowered.contains("logo") || lowered.contains("icon") {
             return nil
         }
         if let alias = windowNameAliases[value] {
@@ -110,8 +123,8 @@ enum MenuBarItemPresentation {
         return Array(Set(extraPids + runningPids)).sorted()
     }
 
-    static func rowIcon(windowSnapshot: NSImage?, appIcon _: NSImage?) -> NSImage? {
-        windowSnapshot
+    static func rowIcon(windowSnapshot: NSImage?, appIcon: NSImage?, isSystemExtra: Bool = true) -> NSImage? {
+        windowSnapshot ?? (isSystemExtra ? nil : appIcon)
     }
 
     static func matchedTitles(

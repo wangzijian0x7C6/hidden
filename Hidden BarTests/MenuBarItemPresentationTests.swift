@@ -37,6 +37,18 @@ final class MenuBarItemPresentationTests: XCTestCase {
             MenuBarItemPresentation.displayName(axTitle: nil, windowName: "NowPlaying", appName: "Control Center"),
             NSLocalizedString("Now Playing", comment: "")
         )
+        XCTAssertEqual(
+            MenuBarItemPresentation.displayName(axTitle: nil, windowName: "iOA_white_icon", appName: "iOA"),
+            "iOA"
+        )
+        XCTAssertEqual(
+            MenuBarItemPresentation.displayName(axTitle: nil, windowName: "130", appName: "WeChat"),
+            "WeChat"
+        )
+        XCTAssertEqual(
+            MenuBarItemPresentation.displayName(axTitle: nil, windowName: "LOGO 16 black", appName: "TT"),
+            "TT"
+        )
     }
 
     func testSkipsAccessibilityWhenUntrusted() {
@@ -149,12 +161,7 @@ final class MenuBarItemPresentationTests: XCTestCase {
 
     func testDoesNotFallBackToSharedAppIcon() {
         let appIcon = NSImage(size: NSSize(width: 16, height: 16))
-        XCTAssertNil(MenuBarItemPresentation.rowIcon(windowSnapshot: nil, appIcon: appIcon))
-    }
-
-    func testHidesGenericRowsUntilAnIconExists() {
-        XCTAssertTrue(MenuBarItemPresentation.isPlaceholderRow(title: "控制中心", hasIcon: false))
-        XCTAssertFalse(MenuBarItemPresentation.isPlaceholderRow(title: "控制中心", hasIcon: true))
-        XCTAssertFalse(MenuBarItemPresentation.isPlaceholderRow(title: "Wi-Fi", hasIcon: false))
+        XCTAssertNil(MenuBarItemPresentation.rowIcon(windowSnapshot: nil, appIcon: appIcon, isSystemExtra: true))
+        XCTAssertNotNil(MenuBarItemPresentation.rowIcon(windowSnapshot: nil, appIcon: appIcon, isSystemExtra: false))
     }
 }

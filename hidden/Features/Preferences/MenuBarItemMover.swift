@@ -72,14 +72,13 @@ enum MenuBarItemMover {
             return (pid, windowNumber, rect, ownerName, windowName)
         }
 
-        let runningPids = NSWorkspace.shared.runningApplications.compactMap { app -> pid_t? in
-            let pid = app.processIdentifier
-            return pid == 0 || pid == ownPID ? nil : pid
+        let systemPids = windows.compactMap { window -> pid_t? in
+            let name = apps[window.pid]?.localizedName ?? window.ownerName ?? ""
+            return MenuBarItemPresentation.isSystemExtraOwner(name) ? window.pid : nil
         }
         let axTitles = extraTitles(
             for: MenuBarItemPresentation.accessibilityPidsToScan(
-                extraPids: windows.map(\.pid),
-                runningPids: runningPids,
+                extraPids: systemPids,
                 trusted: AXIsProcessTrusted()
             )
         )
@@ -88,32 +87,27 @@ enum MenuBarItemMover {
             extras: axTitles.values.flatMap { $0 }
         )
         let separatorMidX = layout.separatorFrame.midX
-
         let canCapture = CGPreflightScreenCaptureAccess()
-        return windows.enumerated().compactMap { index, window in
+
+        return windows.enumerated().map { index, window in
             let app = apps[window.pid]
             let appName = app?.localizedName ?? window.ownerName ?? "Unknown".localized
-            let title = MenuBarItemPresentation.displayName(
-                axTitle: titles[index],
-                windowName: window.windowName,
-                appName: appName
-            )
-            let icon = canCapture
-                ? MenuBarItemPresentation.rowIcon(
-                    windowSnapshot: captureIcon(windowNumber: window.windowNumber),
-                    appIcon: app?.icon
-                )
-                : nil
-            guard !MenuBarItemPresentation.isPlaceholderRow(title: title, hasIcon: icon != nil) else {
-                return nil
-            }
+            let isSystemExtra = MenuBarItemPresentation.isSystemExtraOwner(appName)
             return ManagedMenuBarItem(
                 id: "\(window.pid)-\(window.windowNumber)",
                 windowNumber: window.windowNumber,
                 pid: window.pid,
                 appName: appName,
-                title: title,
-                icon: icon,
+                title: MenuBarItemPresentation.displayName(
+                    axTitle: titles[index],
+                    windowName: window.windowName,
+                    appName: appName
+                ),
+                icon: MenuBarItemPresentation.rowIcon(
+                    windowSnapshot: canCapture ? captureIcon(windowNumber: window.windowNumber) : nil,
+                    appIcon: app?.icon,
+                    isSystemExtra: isSystemExtra
+                ),
                 quartzRect: window.rect,
                 section: MenuBarItemPresentation.section(itemMidX: window.rect.midX, separatorMidX: separatorMidX)
             )
