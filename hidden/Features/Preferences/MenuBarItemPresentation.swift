@@ -32,11 +32,34 @@ enum MenuBarItemPresentation {
         "KeyboardBrightness": "Keyboard Brightness"
     ]
 
-    static func displayName(axTitle: String?, windowName: String?, appName: String) -> String {
-        if isSystemExtraOwner(appName) {
-            return cleaned(axTitle) ?? cleaned(windowName).map(titleCaseIdentifier) ?? appName
+    struct ExtraSource: Equatable {
+        let title: String?
+        let sourceAppName: String
+        let sourcePID: pid_t
+    }
+
+    static func displayName(
+        axTitle: String?,
+        windowName: String?,
+        appName: String,
+        sourceAppName: String? = nil
+    ) -> String {
+        if let sourceAppName, !isSystemExtraOwner(sourceAppName) {
+            return sourceAppName
         }
-        return appName
+        if isSystemExtraOwner(sourceAppName ?? appName) {
+            if let axTitle = specificName(axTitle) {
+                return axTitle
+            }
+            if let windowName = cleaned(windowName) {
+                return titleCaseIdentifier(windowName)
+            }
+        }
+        return sourceAppName ?? appName
+    }
+
+    static func specificName(_ raw: String?) -> String? {
+        cleaned(raw).flatMap { isGenericSystemName($0) ? nil : $0 }
     }
 
     static func isSystemExtraOwner(_ appName: String) -> Bool {
@@ -123,8 +146,57 @@ enum MenuBarItemPresentation {
         return Array(Set(extraPids + runningPids)).sorted()
     }
 
+    static func shouldProbeExtras(bundleIdentifier: String?) -> Bool {
+        guard let id = bundleIdentifier, !id.isEmpty else { return true }
+        if id.contains(".helper") || id.hasSuffix(".WebContent") || id.hasSuffix(".GPU") {
+            return false
+        }
+        let skipPrefixes = [
+            "com.google.Chrome",
+            "com.microsoft.edgemac",
+            "org.mozilla.firefox",
+            "com.apple.Safari",
+            "com.microsoft.VSCode",
+            "com.apple.dt.Xcode",
+            "com.tinyspeck.slackmacgap",
+            "com.hnc.Discord"
+        ]
+        return !skipPrefixes.contains { id == $0 || id.hasPrefix($0 + ".") }
+    }
+
     static func rowIcon(windowSnapshot: NSImage?, appIcon: NSImage?, isSystemExtra: Bool = true) -> NSImage? {
-        windowSnapshot ?? (isSystemExtra ? nil : appIcon)
+        let snapshot = isUsableSnapshot(windowSnapshot) ? windowSnapshot : nil
+        return snapshot ?? (isSystemExtra ? nil : appIcon)
+    }
+
+    static func isUsableSnapshot(_ image: NSImage?) -> Bool {
+        guard let image,
+              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              cgImage.width >= 4,
+              cgImage.height >= 4
+        else {
+            return false
+        }
+        return hasVisiblePixels(cgImage)
+    }
+
+    static func hasVisiblePixels(_ image: CGImage) -> Bool {
+        let width = min(Int(image.width), 32)
+        let height = min(Int(image.height), 32)
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return true
+        }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return stride(from: 3, to: pixels.count, by: 4).contains { pixels[$0] > 16 }
     }
 
     static func matchedTitles(
@@ -166,5 +238,39 @@ enum MenuBarItemPresentation {
             let extraMid = extra.x + extra.width / 2
             return abs(extraMid - itemMidX) < max(36, extra.width) ? cleaned(extra.title) : nil
         }
+    }
+
+    static func matchedExtras(
+        itemMidXs: [CGFloat],
+        extras: [(title: String?, x: CGFloat, width: CGFloat, sourceAppName: String, sourcePID: pid_t)],
+        threshold: CGFloat = 12
+    ) -> [ExtraSource?] {
+        var result = [ExtraSource?](repeating: nil, count: itemMidXs.count)
+        var usedItems = Set<Int>()
+        var usedExtras = Set<Int>()
+
+        func assign(thirdPartyOnly: Bool) {
+            for (extraIndex, extra) in extras.enumerated() {
+                guard !usedExtras.contains(extraIndex) else { continue }
+                let isThirdParty = !isSystemExtraOwner(extra.sourceAppName)
+                guard isThirdParty == thirdPartyOnly else { continue }
+                let extraMid = extra.x + extra.width / 2
+                let nearest = itemMidXs.enumerated()
+                    .filter { !usedItems.contains($0.offset) }
+                    .min { abs($0.element - extraMid) < abs($1.element - extraMid) }
+                guard let nearest, abs(nearest.element - extraMid) <= threshold else { continue }
+                usedItems.insert(nearest.offset)
+                usedExtras.insert(extraIndex)
+                result[nearest.offset] = ExtraSource(
+                    title: specificName(extra.title),
+                    sourceAppName: extra.sourceAppName,
+                    sourcePID: extra.sourcePID
+                )
+            }
+        }
+
+        assign(thirdPartyOnly: true)
+        assign(thirdPartyOnly: false)
+        return result
     }
 }

@@ -182,8 +182,13 @@ final class MenuBarItemManagerViewController: NSViewController {
             let ownPID = ProcessInfo.processInfo.processIdentifier
             self.separatorWindowNumber = MenuBarItemMover.windowNumber(ownedBy: ownPID, nearestAppKitFrame: layout.separatorFrame)
             self.expandCollapseWindowNumber = MenuBarItemMover.windowNumber(ownedBy: ownPID, nearestAppKitFrame: layout.expandCollapseFrame)
-            let items = MenuBarItemMover.extras(layout: layout)
-            self.apply(items, accessibilityTrusted: AXIsProcessTrusted())
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let items = MenuBarItemMover.extras(layout: layout)
+                let trusted = AXIsProcessTrusted()
+                DispatchQueue.main.async {
+                    self?.apply(items, accessibilityTrusted: trusted)
+                }
+            }
         }
     }
 
@@ -195,7 +200,8 @@ final class MenuBarItemManagerViewController: NSViewController {
         hiddenCountLabel.stringValue = "\(hiddenItems.count)"
         visibleCountLabel.stringValue = "\(visibleItems.count)"
         let needsAX = !accessibilityTrusted
-        let needsScreen = !CGPreflightScreenCaptureAccess()
+        let capturedIcons = items.contains { $0.icon != nil }
+        let needsScreen = !capturedIcons && !CGPreflightScreenCaptureAccess()
         permissionButton.isHidden = !needsAX && !needsScreen
         if needsAX || needsScreen {
             statusLabel.stringValue = "Grant Accessibility and Screen Recording to show names and icons.".localized

@@ -12,6 +12,39 @@ final class MenuBarItemPresentationTests: XCTestCase {
         )
     }
 
+    func testThirdPartyUsesSourceAppNameEvenWhenOwnerIsControlCenter() {
+        XCTAssertEqual(
+            MenuBarItemPresentation.displayName(
+                axTitle: "控制中心",
+                windowName: "Item-0",
+                appName: "Control Center",
+                sourceAppName: "ChatGPT"
+            ),
+            "ChatGPT"
+        )
+        XCTAssertEqual(
+            MenuBarItemPresentation.displayName(
+                axTitle: "控制中心",
+                windowName: "130",
+                appName: "控制中心",
+                sourceAppName: "微信"
+            ),
+            "微信"
+        )
+    }
+
+    func testGenericAXTitleDoesNotHideSystemWindowName() {
+        XCTAssertEqual(
+            MenuBarItemPresentation.displayName(
+                axTitle: "控制中心",
+                windowName: "Battery",
+                appName: "Control Center",
+                sourceAppName: "Control Center"
+            ),
+            "Battery"
+        )
+    }
+
     func testIgnoresPlaceholderWindowNames() {
         XCTAssertEqual(
             MenuBarItemPresentation.displayName(axTitle: nil, windowName: "Item-3", appName: "Control Center"),
@@ -163,5 +196,28 @@ final class MenuBarItemPresentationTests: XCTestCase {
         let appIcon = NSImage(size: NSSize(width: 16, height: 16))
         XCTAssertNil(MenuBarItemPresentation.rowIcon(windowSnapshot: nil, appIcon: appIcon, isSystemExtra: true))
         XCTAssertNotNil(MenuBarItemPresentation.rowIcon(windowSnapshot: nil, appIcon: appIcon, isSystemExtra: false))
+        XCTAssertFalse(MenuBarItemPresentation.isUsableSnapshot(appIcon))
+    }
+
+    func testSkipsHeavyAppsWhenProbingExtras() {
+        XCTAssertFalse(MenuBarItemPresentation.shouldProbeExtras(bundleIdentifier: "com.google.Chrome"))
+        XCTAssertFalse(MenuBarItemPresentation.shouldProbeExtras(bundleIdentifier: "com.google.Chrome.helper"))
+        XCTAssertTrue(MenuBarItemPresentation.shouldProbeExtras(bundleIdentifier: "com.openai.chat"))
+        XCTAssertTrue(MenuBarItemPresentation.shouldProbeExtras(bundleIdentifier: "com.tencent.xinWeChat"))
+        XCTAssertTrue(MenuBarItemPresentation.shouldProbeExtras(bundleIdentifier: "com.apple.controlcenter"))
+    }
+
+    func testMatchesThirdPartySourceByXBeforeControlCenter() {
+        let matches = MenuBarItemPresentation.matchedExtras(
+            itemMidXs: [100, 140],
+            extras: [
+                (title: "控制中心", x: 90, width: 20, sourceAppName: "Control Center", sourcePID: 1),
+                (title: nil, x: 92, width: 20, sourceAppName: "ChatGPT", sourcePID: 2),
+                (title: "Wi-Fi", x: 130, width: 20, sourceAppName: "Control Center", sourcePID: 1)
+            ]
+        )
+        XCTAssertEqual(matches[0]?.sourceAppName, "ChatGPT")
+        XCTAssertEqual(matches[1]?.sourceAppName, "Control Center")
+        XCTAssertEqual(matches[1]?.title, "Wi-Fi")
     }
 }

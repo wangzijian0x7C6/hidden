@@ -72,40 +72,50 @@ enum MenuBarItemMover {
             return (pid, windowNumber, rect, ownerName, windowName)
         }
 
-        let systemPids = windows.compactMap { window -> pid_t? in
-            let name = apps[window.pid]?.localizedName ?? window.ownerName ?? ""
-            return MenuBarItemPresentation.isSystemExtraOwner(name) ? window.pid : nil
+        let runningPids = apps.values.compactMap { app -> pid_t? in
+            guard app.processIdentifier != ownPID,
+                  !app.isTerminated,
+                  app.activationPolicy != .prohibited,
+                  MenuBarItemPresentation.shouldProbeExtras(bundleIdentifier: app.bundleIdentifier)
+            else {
+                return nil
+            }
+            return app.processIdentifier
         }
-        let axTitles = extraTitles(
+        let extras = extraGeometries(
             for: MenuBarItemPresentation.accessibilityPidsToScan(
-                extraPids: systemPids,
+                extraPids: windows.map(\.pid),
+                runningPids: runningPids,
                 trusted: AXIsProcessTrusted()
-            )
+            ),
+            apps: apps
         )
-        let titles = MenuBarItemPresentation.matchedTitles(
+        let matches = MenuBarItemPresentation.matchedExtras(
             itemMidXs: windows.map(\.rect.midX),
-            extras: axTitles.values.flatMap { $0 }
+            extras: extras
         )
         let separatorMidX = layout.separatorFrame.midX
-        let canCapture = CGPreflightScreenCaptureAccess()
 
         return windows.enumerated().map { index, window in
-            let app = apps[window.pid]
-            let appName = app?.localizedName ?? window.ownerName ?? "Unknown".localized
-            let isSystemExtra = MenuBarItemPresentation.isSystemExtraOwner(appName)
+            let ownerName = apps[window.pid]?.localizedName ?? window.ownerName ?? "Unknown".localized
+            let match = index < matches.count ? matches[index] : nil
+            let sourceApp = match.flatMap { apps[$0.sourcePID] }
+            let sourceName = match?.sourceAppName
+            let isSystemExtra = MenuBarItemPresentation.isSystemExtraOwner(sourceName ?? ownerName)
             return ManagedMenuBarItem(
                 id: "\(window.pid)-\(window.windowNumber)",
                 windowNumber: window.windowNumber,
                 pid: window.pid,
-                appName: appName,
+                appName: sourceName ?? ownerName,
                 title: MenuBarItemPresentation.displayName(
-                    axTitle: titles[index],
+                    axTitle: match?.title,
                     windowName: window.windowName,
-                    appName: appName
+                    appName: ownerName,
+                    sourceAppName: sourceName
                 ),
                 icon: MenuBarItemPresentation.rowIcon(
-                    windowSnapshot: canCapture ? captureIcon(windowNumber: window.windowNumber) : nil,
-                    appIcon: app?.icon,
+                    windowSnapshot: captureIcon(windowNumber: window.windowNumber),
+                    appIcon: sourceApp?.icon,
                     isSystemExtra: isSystemExtra
                 ),
                 quartzRect: window.rect,
@@ -221,29 +231,35 @@ enum MenuBarItemMover {
         return nil
     }
 
-    private static func extraTitles(for pids: [pid_t]) -> [pid_t: [(title: String, x: CGFloat, width: CGFloat)]] {
-        var result: [pid_t: [(title: String, x: CGFloat, width: CGFloat)]] = [:]
+    private static func extraGeometries(
+        for pids: [pid_t],
+        apps: [pid_t: NSRunningApplication]
+    ) -> [(title: String?, x: CGFloat, width: CGFloat, sourceAppName: String, sourcePID: pid_t)] {
+        var result: [(title: String?, x: CGFloat, width: CGFloat, sourceAppName: String, sourcePID: pid_t)] = []
         for pid in pids {
             let axApp = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(axApp, 0.4)
             var extrasValue: AnyObject?
-            guard AXUIElementCopyAttributeValue(axApp, "AXExtrasMenuBar" as CFString, &extrasValue) == .success else {
+            guard AXUIElementCopyAttributeValue(axApp, "AXExtrasMenuBar" as CFString, &extrasValue) == .success,
+                  let extrasBar = extrasValue as? AXUIElement
+            else {
                 continue
             }
-            var collected: [(title: String, x: CGFloat, width: CGFloat)] = []
-            collectNamedExtras(from: extrasValue as! AXUIElement, into: &collected, depth: 0)
-            if !collected.isEmpty {
-                result[pid] = collected
+            let sourceName = apps[pid]?.localizedName ?? "Unknown".localized
+            var collected: [(title: String?, x: CGFloat, width: CGFloat)] = []
+            collectExtras(from: extrasBar, into: &collected, depth: 0)
+            for extra in collected {
+                result.append((extra.title, extra.x, extra.width, sourceName, pid))
             }
         }
         return result
     }
 
-    private static func collectNamedExtras(
+    private static func collectExtras(
         from element: AXUIElement,
-        into result: inout [(title: String, x: CGFloat, width: CGFloat)],
+        into result: inout [(title: String?, x: CGFloat, width: CGFloat)],
         depth: Int
     ) {
-        guard depth < 4 else { return }
         var childrenValue: AnyObject?
         let children: [AXUIElement]
         if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenValue) == .success {
@@ -251,14 +267,13 @@ enum MenuBarItemMover {
         } else {
             children = []
         }
-        var addedChild = false
-        for child in children {
-            let before = result.count
-            collectNamedExtras(from: child, into: &result, depth: depth + 1)
-            addedChild = addedChild || result.count > before
+        if depth == 0 {
+            for child in children {
+                collectExtras(from: child, into: &result, depth: 1)
+            }
+            return
         }
-        guard !addedChild,
-              let position = axPoint(kAXPositionAttribute as CFString, of: element),
+        guard let position = axPoint(kAXPositionAttribute as CFString, of: element),
               let size = axSize(kAXSizeAttribute as CFString, of: element),
               size.width > 2
         else { return }
@@ -268,12 +283,19 @@ enum MenuBarItemMover {
                 ?? axString(kAXHelpAttribute as CFString, of: element),
             identifier: axString("AXIdentifier" as CFString, of: element)
         )
-        if let name {
-            result.append((name, position.x, size.width))
-        }
+        result.append((name, position.x, size.width))
     }
 
     private static func captureIcon(windowNumber: Int) -> NSImage? {
+        for _ in 1...2 {
+            if let image = snapshotImage(windowNumber: windowNumber) {
+                return image
+            }
+        }
+        return nil
+    }
+
+    private static func snapshotImage(windowNumber: Int) -> NSImage? {
         guard let windowID = CGWindowID(exactly: windowNumber) else { return nil }
         var pointer = UnsafeRawPointer(bitPattern: UInt(windowID))
         let fromList: CGImage?
@@ -293,9 +315,14 @@ enum MenuBarItemMover {
             [.boundsIgnoreFraming, .bestResolution]
         )
         guard let image else { return nil }
-        let nsImage = NSImage(cgImage: image, size: NSSize(width: 22, height: 22))
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        let size = NSSize(
+            width: max(CGFloat(image.width) / scale, 1),
+            height: max(CGFloat(image.height) / scale, 1)
+        )
+        let nsImage = NSImage(cgImage: image, size: size)
         nsImage.isTemplate = false
-        return nsImage
+        return MenuBarItemPresentation.isUsableSnapshot(nsImage) ? nsImage : nil
     }
 
     private static func axPoint(_ attribute: CFString, of element: AXUIElement) -> CGPoint? {
