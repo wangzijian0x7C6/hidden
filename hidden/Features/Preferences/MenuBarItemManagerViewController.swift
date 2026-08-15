@@ -12,6 +12,11 @@ final class MenuBarItemManagerViewController: NSViewController {
     private let visibleCountLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(wrappingLabelWithString: "")
     private let permissionButton = NSButton(title: "Grant Access".localized, target: nil, action: nil)
+    private let managerRoot = NSStackView()
+    private let permissionRoot = NSStackView()
+    private let permissionTitle = NSTextField(labelWithString: "")
+    private let permissionStep = NSTextField(labelWithString: "")
+    private let permissionDetail = NSTextField(wrappingLabelWithString: "")
     private var hiddenItems: [ManagedMenuBarItem] = []
     private var visibleItems: [ManagedMenuBarItem] = []
     private var layout: MenuBarManagementLayout?
@@ -46,10 +51,10 @@ final class MenuBarItemManagerViewController: NSViewController {
             workspace.addObserver(self, selector: #selector(autoRefresh), name: NSWorkspace.didLaunchApplicationNotification, object: nil)
             workspace.addObserver(self, selector: #selector(autoRefresh), name: NSWorkspace.didTerminateApplicationNotification, object: nil)
             autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-                self?.refresh(reuseLayout: true)
+                self?.present(reuseLayout: true)
             }
         }
-        refresh()
+        present()
     }
 
     override func viewDidDisappear() {
@@ -82,32 +87,56 @@ final class MenuBarItemManagerViewController: NSViewController {
         permissionButton.bezelStyle = .rounded
         permissionButton.target = self
         permissionButton.action = #selector(permissionPressed)
-        permissionButton.isHidden = true
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         statusLabel.maximumNumberOfLines = 2
         statusLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        let footer = NSStackView(views: [statusLabel, permissionButton])
+        let footer = NSStackView(views: [statusLabel])
         footer.orientation = .horizontal
         footer.alignment = .centerY
         footer.spacing = 8
 
-        let root = NSStackView(views: [help, columns, footer])
-        root.orientation = .vertical
-        root.alignment = .leading
-        root.spacing = 12
-        root.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(root)
+        managerRoot.orientation = .vertical
+        managerRoot.alignment = .leading
+        managerRoot.spacing = 12
+        managerRoot.translatesAutoresizingMaskIntoConstraints = false
+        [help, columns, footer].forEach(managerRoot.addArrangedSubview)
 
+        permissionTitle.font = .systemFont(ofSize: 17, weight: .semibold)
+        permissionTitle.alignment = .center
+        permissionStep.textColor = .secondaryLabelColor
+        permissionStep.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        permissionStep.alignment = .center
+        permissionDetail.textColor = .secondaryLabelColor
+        permissionDetail.font = .systemFont(ofSize: NSFont.systemFontSize)
+        permissionDetail.alignment = .center
+        permissionDetail.maximumNumberOfLines = 3
+        permissionButton.bezelStyle = .rounded
+        permissionButton.keyEquivalent = "\r"
+
+        permissionRoot.orientation = .vertical
+        permissionRoot.alignment = .centerX
+        permissionRoot.spacing = 12
+        permissionRoot.translatesAutoresizingMaskIntoConstraints = false
+        permissionRoot.isHidden = true
+        [permissionTitle, permissionStep, permissionDetail, permissionButton].forEach(permissionRoot.addArrangedSubview)
+
+        view.addSubview(managerRoot)
+        view.addSubview(permissionRoot)
         NSLayoutConstraint.activate([
-            root.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            root.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            root.topAnchor.constraint(equalTo: view.topAnchor, constant: 38),
-            root.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -16),
-            columns.widthAnchor.constraint(equalTo: root.widthAnchor),
+            managerRoot.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            managerRoot.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            managerRoot.topAnchor.constraint(equalTo: view.topAnchor, constant: 38),
+            managerRoot.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -16),
+            columns.widthAnchor.constraint(equalTo: managerRoot.widthAnchor),
             columns.heightAnchor.constraint(greaterThanOrEqualToConstant: 280),
-            footer.widthAnchor.constraint(equalTo: root.widthAnchor)
+            footer.widthAnchor.constraint(equalTo: managerRoot.widthAnchor),
+            permissionRoot.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            permissionRoot.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            permissionRoot.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 48),
+            permissionRoot.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -48),
+            permissionDetail.widthAnchor.constraint(lessThanOrEqualToConstant: 360)
         ])
     }
 
@@ -155,12 +184,12 @@ final class MenuBarItemManagerViewController: NSViewController {
     }
 
     @objc private func autoRefresh() {
-        refresh(reuseLayout: true)
+        present(reuseLayout: true)
     }
 
     @objc private func appDidBecomeActive() {
         guard view.window?.isVisible == true else { return }
-        refresh()
+        present()
     }
 
     @objc private func permissionPressed() {
@@ -171,7 +200,6 @@ final class MenuBarItemManagerViewController: NSViewController {
                 "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
             ])
-            statusLabel.stringValue = "Accessibility is required. Enable Hidden Bar in System Settings.".localized
             return
         }
         if !CGPreflightScreenCaptureAccess() {
@@ -180,8 +208,41 @@ final class MenuBarItemManagerViewController: NSViewController {
                 "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ScreenCapture",
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
             ])
-            statusLabel.stringValue = "Screen Recording is required. Enable Hidden Bar in System Settings.".localized
         }
+    }
+
+    private func present(reuseLayout: Bool = false) {
+        if !AXIsProcessTrusted() {
+            showPermissionGate(step: 1)
+            return
+        }
+        if !CGPreflightScreenCaptureAccess() {
+            showPermissionGate(step: 2)
+            return
+        }
+        showManager()
+        refresh(reuseLayout: reuseLayout)
+    }
+
+    private func showPermissionGate(step: Int) {
+        isBusy = false
+        managerRoot.isHidden = true
+        permissionRoot.isHidden = false
+        permissionTitle.stringValue = "Permission required".localized
+        if step == 1 {
+            permissionStep.stringValue = "Step 1 of 2".localized
+            permissionDetail.stringValue = "Accessibility is required to name and move menu bar items.".localized
+            permissionButton.title = "Grant Accessibility".localized
+        } else {
+            permissionStep.stringValue = "Step 2 of 2".localized
+            permissionDetail.stringValue = "Screen Recording is required to show menu bar icons.".localized
+            permissionButton.title = "Grant Screen Recording".localized
+        }
+    }
+
+    private func showManager() {
+        permissionRoot.isHidden = true
+        managerRoot.isHidden = false
     }
 
     private func openPrivacySettings(anchors: [String]) {
@@ -191,6 +252,10 @@ final class MenuBarItemManagerViewController: NSViewController {
     }
 
     private func refresh(reuseLayout: Bool = false) {
+        guard AXIsProcessTrusted(), CGPreflightScreenCaptureAccess() else {
+            present()
+            return
+        }
         guard !isBusy, let appDelegate = NSApp.delegate as? AppDelegate else { return }
         isBusy = true
         let scan: (MenuBarManagementLayout) -> Void = { [weak self] layout in
@@ -215,29 +280,20 @@ final class MenuBarItemManagerViewController: NSViewController {
     }
 
     private func apply(_ items: [ManagedMenuBarItem], accessibilityTrusted: Bool) {
+        if !accessibilityTrusted || !CGPreflightScreenCaptureAccess() {
+            present()
+            return
+        }
+        showManager()
         hiddenItems = items.filter { $0.section == .hidden }
         visibleItems = items.filter { $0.section == .visible }
         hiddenTable.reloadData()
         visibleTable.reloadData()
         hiddenCountLabel.stringValue = "\(hiddenItems.count)"
         visibleCountLabel.stringValue = "\(visibleItems.count)"
-        let needsAX = !accessibilityTrusted
-        let needsScreen = !CGPreflightScreenCaptureAccess()
-        permissionButton.isHidden = !needsAX && !needsScreen
-        if needsAX && needsScreen {
-            permissionButton.title = "Grant Access".localized
-            statusLabel.stringValue = "Accessibility and Screen Recording are both required.".localized
-        } else if needsAX {
-            permissionButton.title = "Grant Accessibility".localized
-            statusLabel.stringValue = "Accessibility is required to name and move menu bar items.".localized
-        } else if needsScreen {
-            permissionButton.title = "Grant Screen Recording".localized
-            statusLabel.stringValue = "Screen Recording is required to show menu bar icons.".localized
-        } else {
-            statusLabel.stringValue = items.isEmpty
-                ? "No identifiable menu bar items were found.".localized
-                : "Drop an item to apply the real menu bar position.".localized
-        }
+        statusLabel.stringValue = items.isEmpty
+            ? "No identifiable menu bar items were found.".localized
+            : "Drop an item to apply the real menu bar position.".localized
         isBusy = false
     }
 

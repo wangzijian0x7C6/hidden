@@ -12,7 +12,10 @@
 "Disable Auto Collapse" = "关闭自动折叠";
 "Quit" = "退出";
 "Set Shortcut" = "设置快捷键";
-"Items" = "图标";
+"Items" = "图标管理";
+"Permission required" = "需要授权";
+"Step 1 of 2" = "第 1 步，共 2 步 · 辅助功能";
+"Step 2 of 2" = "第 2 步，共 2 步 · 屏幕录制";
 "Hidden" = "隐藏";
 "Visible" = "显示";
 "Refresh" = "刷新";

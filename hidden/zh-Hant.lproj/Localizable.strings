@@ -12,7 +12,10 @@
 "Enable Auto Collapse" = "開啟自動收合";
 "Disable Auto Collapse" = "關閉自動收合";
 "Set Shortcut" = "設定快速鍵";
-"Items" = "圖示";
+"Items" = "圖示管理";
+"Permission required" = "需要授權";
+"Step 1 of 2" = "第 1 步，共 2 步 · 輔助使用";
+"Step 2 of 2" = "第 2 步，共 2 步 · 螢幕錄製";
 "Hidden" = "隱藏";
 "Visible" = "顯示";
 "Refresh" = "重新整理";

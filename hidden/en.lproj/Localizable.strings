@@ -12,7 +12,10 @@
 "Disable Auto Collapse" = "Disable Auto Collapse";
 "Quit" = "Quit";
 "Set Shortcut" = "Set Shortcut";
-"Items" = "Items";
+"Items" = "Icon Management";
+"Permission required" = "Permission required";
+"Step 1 of 2" = "Step 1 of 2 · Accessibility";
+"Step 2 of 2" = "Step 2 of 2 · Screen Recording";
 "Hidden" = "Hidden";
 "Visible" = "Visible";
 "Refresh" = "Refresh";

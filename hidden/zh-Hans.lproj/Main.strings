@@ -84,7 +84,7 @@
 "B2x-1Q-Aei.ibShadowedLabels[0]" = "通用设置";
 
 /* Class = "NSSegmentedCell"; B2x-1Q-Aei.ibShadowedLabels[1] = "Items"; ObjectID = "B2x-1Q-Aei"; */
-"B2x-1Q-Aei.ibShadowedLabels[1]" = "图标";
+"B2x-1Q-Aei.ibShadowedLabels[1]" = "图标管理";
 
 /* Class = "NSSegmentedCell"; B2x-1Q-Aei.ibShadowedLabels[2] = "About"; ObjectID = "B2x-1Q-Aei"; */
 "B2x-1Q-Aei.ibShadowedLabels[2]" = "关于我们";
