@@ -129,6 +129,10 @@ enum MenuBarItemPresentation {
         value.replacingOccurrences(of: "([a-z]{2})([A-Z])", with: "$1 $2", options: .regularExpression)
     }
 
+    static func isIdentifiableRow(title: String, icon: NSImage?) -> Bool {
+        specificName(title) != nil || icon != nil
+    }
+
     static func isGenericSystemName(_ value: String) -> Bool {
         let lowered = value.lowercased()
         return lowered == "control center"

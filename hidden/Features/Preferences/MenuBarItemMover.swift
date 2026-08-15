@@ -138,6 +138,7 @@ enum MenuBarItemMover {
                 section: MenuBarItemPresentation.section(itemMidX: window.rect.midX, separatorMidX: separatorMidX)
             )
         }
+        .filter { MenuBarItemPresentation.isIdentifiableRow(title: $0.title, icon: $0.icon) }
         .sorted { $0.quartzRect.minX < $1.quartzRect.minX }
     }
 

@@ -84,6 +84,15 @@ final class MenuBarItemPresentationTests: XCTestCase {
         )
     }
 
+    func testHidesUnidentifiedControlCenterRows() {
+        XCTAssertFalse(MenuBarItemPresentation.isIdentifiableRow(title: "控制中心", icon: nil))
+        XCTAssertFalse(MenuBarItemPresentation.isIdentifiableRow(title: "Control Center", icon: nil))
+        XCTAssertTrue(MenuBarItemPresentation.isIdentifiableRow(title: "微信", icon: nil))
+        XCTAssertTrue(MenuBarItemPresentation.isIdentifiableRow(title: "Wi-Fi", icon: nil))
+        let icon = NSImage(size: NSSize(width: 16, height: 16))
+        XCTAssertTrue(MenuBarItemPresentation.isIdentifiableRow(title: "控制中心", icon: icon))
+    }
+
     func testSkipsAccessibilityWhenUntrusted() {
         XCTAssertEqual(
             MenuBarItemPresentation.accessibilityPidsToScan(extraPids: [11, 22, 11], trusted: false),

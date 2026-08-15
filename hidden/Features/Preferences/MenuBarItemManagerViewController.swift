@@ -200,8 +200,7 @@ final class MenuBarItemManagerViewController: NSViewController {
         hiddenCountLabel.stringValue = "\(hiddenItems.count)"
         visibleCountLabel.stringValue = "\(visibleItems.count)"
         let needsAX = !accessibilityTrusted
-        let capturedIcons = items.contains { $0.icon != nil }
-        let needsScreen = !capturedIcons && !CGPreflightScreenCaptureAccess()
+        let needsScreen = !CGPreflightScreenCaptureAccess()
         permissionButton.isHidden = !needsAX && !needsScreen
         if needsAX || needsScreen {
             statusLabel.stringValue = "Grant Accessibility and Screen Recording to show names and icons.".localized
