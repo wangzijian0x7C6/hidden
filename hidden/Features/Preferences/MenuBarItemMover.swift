@@ -410,7 +410,9 @@ enum MenuBarItemMover {
             else {
                 continue
             }
-            let extrasBar = extrasValue as! AXUIElement
+            guard let extrasBar = extrasValue as? AXUIElement else {
+                continue
+            }
             let sourceName = apps[pid]?.localizedName ?? "Unknown".localized
             var collected: [(title: String?, x: CGFloat, width: CGFloat, identifier: String?)] = []
             collectExtras(from: extrasBar, into: &collected, depth: 0)
@@ -500,24 +502,12 @@ enum MenuBarItemMover {
 
     private static func snapshotImage(windowNumber: Int) -> NSImage? {
         guard let windowID = CGWindowID(exactly: windowNumber) else { return nil }
-        var pointer = UnsafeRawPointer(bitPattern: UInt(windowID))
-        let fromList: CGImage?
-        if let array = CFArrayCreate(nil, &pointer, 1, nil) {
-            fromList = CGImage(
-                windowListFromArrayScreenBounds: .null,
-                windowArray: array,
-                imageOption: [.boundsIgnoreFraming, .bestResolution]
-            )
-        } else {
-            fromList = nil
-        }
-        let image = fromList ?? CGWindowListCreateImage(
+        guard let image = CGWindowListCreateImage(
             .null,
             .optionIncludingWindow,
             windowID,
             [.boundsIgnoreFraming, .bestResolution]
-        )
-        guard let image else { return nil }
+        ) else { return nil }
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         let size = NSSize(
             width: max(CGFloat(image.width) / scale, 1),

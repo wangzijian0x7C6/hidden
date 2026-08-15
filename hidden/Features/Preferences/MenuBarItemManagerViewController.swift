@@ -24,6 +24,8 @@ final class MenuBarItemManagerViewController: NSViewController {
     private var expandCollapseWindowNumber: Int?
     private var isBusy = false
     private var autoRefreshTimer: Timer?
+    private var presentWork: DispatchWorkItem?
+    private var didRequestScreenCapture = false
 
     init() {
         super.init(nibName: nil, bundle: nil)
@@ -113,7 +115,6 @@ final class MenuBarItemManagerViewController: NSViewController {
         permissionDetail.alignment = .center
         permissionDetail.maximumNumberOfLines = 3
         permissionButton.bezelStyle = .rounded
-        permissionButton.keyEquivalent = "\r"
 
         permissionRoot.orientation = .vertical
         permissionRoot.alignment = .centerX
@@ -184,12 +185,12 @@ final class MenuBarItemManagerViewController: NSViewController {
     }
 
     @objc private func autoRefresh() {
-        present(reuseLayout: true)
+        schedulePresent(reuseLayout: true)
     }
 
     @objc private func appDidBecomeActive() {
         guard view.window?.isVisible == true else { return }
-        present()
+        schedulePresent()
     }
 
     @objc private func permissionPressed() {
@@ -202,13 +203,19 @@ final class MenuBarItemManagerViewController: NSViewController {
             ])
             return
         }
-        if !CGPreflightScreenCaptureAccess() {
+        if !CGPreflightScreenCaptureAccess(), !didRequestScreenCapture {
+            didRequestScreenCapture = true
             _ = CGRequestScreenCaptureAccess()
-            openPrivacySettings(anchors: [
-                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ScreenCapture",
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-            ])
         }
+    }
+
+    private func schedulePresent(reuseLayout: Bool = false) {
+        presentWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.present(reuseLayout: reuseLayout)
+        }
+        presentWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
     }
 
     private func present(reuseLayout: Bool = false) {
@@ -217,6 +224,7 @@ final class MenuBarItemManagerViewController: NSViewController {
             return
         }
         if !CGPreflightScreenCaptureAccess() {
+            didRequestScreenCapture = false
             showPermissionGate(step: 2)
             return
         }
@@ -280,6 +288,7 @@ final class MenuBarItemManagerViewController: NSViewController {
     }
 
     private func apply(_ items: [ManagedMenuBarItem], accessibilityTrusted: Bool) {
+        isBusy = false
         if !accessibilityTrusted || !CGPreflightScreenCaptureAccess() {
             present()
             return
