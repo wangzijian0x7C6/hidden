@@ -45,9 +45,10 @@ enum MenuBarItemMover {
     static func extras(layout: MenuBarManagementLayout) -> [ManagedMenuBarItem] {
         let ownPID = ProcessInfo.processInfo.processIdentifier
         let apps = Dictionary(
-            uniqueKeysWithValues: NSWorkspace.shared.runningApplications.compactMap { app -> (pid_t, NSRunningApplication)? in
+            NSWorkspace.shared.runningApplications.compactMap { app -> (pid_t, NSRunningApplication)? in
                 app.processIdentifier == 0 ? nil : (app.processIdentifier, app)
-            }
+            },
+            uniquingKeysWith: { first, _ in first }
         )
         let windows = menuBarWindows().compactMap { info -> (pid: pid_t, windowNumber: Int, rect: CGRect, ownerName: String?, windowName: String?)? in
             let windowName = info[kCGWindowName as String] as? String
@@ -82,10 +83,12 @@ enum MenuBarItemMover {
             }
             return app.processIdentifier
         }
-        let knownApps = Dictionary(uniqueKeysWithValues: apps.values.compactMap { app -> (String, String)? in
-            guard let id = app.bundleIdentifier, let name = app.localizedName else { return nil }
-            return (id, name)
-        })
+        let knownApps = MenuBarItemPresentation.namesByBundleID(
+            apps.values.compactMap { app in
+                guard let id = app.bundleIdentifier, let name = app.localizedName else { return nil }
+                return (id, name)
+            }
+        )
         let extras = collectExtraGeometries(
             for: MenuBarItemPresentation.accessibilityPidsToScan(
                 extraPids: windows.map(\.pid),

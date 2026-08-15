@@ -252,6 +252,17 @@ final class MenuBarItemPresentationTests: XCTestCase {
         XCTAssertEqual(matches[0]?.sourceAppName, "微信")
     }
 
+    func testDuplicateBundleIDsKeepTheFirstName() {
+        let names = MenuBarItemPresentation.namesByBundleID([
+            ("com.tencent.xinWeChat", "微信"),
+            ("com.tencent.xinWeChat", "WeChat"),
+            ("com.openai.chat", "ChatGPT")
+        ])
+        XCTAssertEqual(names["com.tencent.xinWeChat"], "微信")
+        XCTAssertEqual(names["com.openai.chat"], "ChatGPT")
+        XCTAssertEqual(names.count, 2)
+    }
+
     func testResolvesBundleIDHintToRealApp() {
         let known = [
             "com.openai.chat": "ChatGPT",

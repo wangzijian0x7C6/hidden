@@ -73,6 +73,10 @@ enum MenuBarItemPresentation {
         return scannedAppName
     }
 
+    static func namesByBundleID(_ pairs: [(String, String)]) -> [String: String] {
+        Dictionary(pairs, uniquingKeysWith: { first, _ in first })
+    }
+
     static func resolvedSourceName(
         ownerName: String,
         extraSourceName: String?,
