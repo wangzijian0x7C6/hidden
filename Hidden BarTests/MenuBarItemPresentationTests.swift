@@ -220,6 +220,43 @@ final class MenuBarItemPresentationTests: XCTestCase {
         XCTAssertNil(MenuBarItemPresentation.visibleBounds(of: image))
     }
 
+    func testColorfulDetectionRequiresSaturation() {
+        let gray = CGImage(
+            width: 2,
+            height: 2,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: 8,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: CGDataProvider(data: Data([
+                200, 200, 200, 255, 200, 200, 200, 255,
+                200, 200, 200, 255, 200, 200, 200, 255
+            ]) as CFData)!,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )!
+        let color = CGImage(
+            width: 2,
+            height: 2,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: 8,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: CGDataProvider(data: Data([
+                30, 180, 80, 255, 30, 180, 80, 255,
+                30, 180, 80, 255, 30, 180, 80, 255
+            ]) as CFData)!,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )!
+        XCTAssertFalse(MenuBarItemPresentation.isColorful(gray))
+        XCTAssertTrue(MenuBarItemPresentation.isColorful(color))
+    }
+
     func testDoesNotFallBackToSharedAppIcon() {
         let appIcon = NSImage(size: NSSize(width: 16, height: 16))
         XCTAssertNil(MenuBarItemPresentation.rowIcon(windowSnapshot: nil, appIcon: appIcon, isSystemExtra: true))

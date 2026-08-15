@@ -160,22 +160,38 @@ enum MenuBarItemMover {
         .0
     }
 
-    static func move(_ item: ManagedMenuBarItem, relation: NativeMenuBarRelation) -> Bool {
+    enum MoveResult: Equatable {
+        case moved
+        case alreadyThere
+        case missingWindows
+        case crossedNotch
+        case timedOut
+    }
+
+    static func move(_ item: ManagedMenuBarItem, relation: NativeMenuBarRelation) -> MoveResult {
+        logMove("begin \(item.title) pid=\(item.pid) window=\(item.windowNumber) target=\(relation.targetWindowNumber)")
         CGDisplayHideCursor(CGMainDisplayID())
         defer { CGDisplayShowCursor(CGMainDisplayID()) }
         let cursor = CGEvent(source: nil)?.location
         defer {
             if let cursor { CGWarpMouseCursorPosition(cursor) }
         }
-        for _ in 1...2 {
+        var crossedNotch = false
+        for attempt in 1...3 {
             guard
                 let sourceRect = currentRect(windowNumber: item.windowNumber),
                 let targetRect = currentRect(windowNumber: relation.targetWindowNumber)
             else {
-                return false
+                logMove("missing windows attempt=\(attempt)")
+                return .missingWindows
             }
+            let notch = notchFrame()
+            let crosses = crossesNotch(sourceRect, targetRect, notch: notch)
+            crossedNotch = crossedNotch || crosses
+            logMove("attempt=\(attempt) source=\(sourceRect) target=\(targetRect) notch=\(String(describing: notch)) crosses=\(crosses)")
             if satisfies(sourceRect, relation: relation, targetRect: targetRect) {
-                return true
+                logMove("already in place")
+                return .alreadyThere
             }
             let points = movePoints(sourceRect: sourceRect, targetRect: targetRect, relation: relation)
             postMove(
@@ -186,11 +202,46 @@ enum MenuBarItemMover {
                 end: points.end
             )
             let updated = waitForMove(windowNumber: item.windowNumber, from: sourceRect)
+            logMove("after drag rect=\(String(describing: updated))")
             if let updated, satisfies(updated, relation: relation, targetRect: currentRect(windowNumber: relation.targetWindowNumber) ?? targetRect) {
-                return true
+                logMove("moved")
+                return .moved
             }
         }
-        return false
+        let result: MoveResult = crossedNotch ? .crossedNotch : .timedOut
+        logMove("failed \(result)")
+        return result
+    }
+
+    private static func notchFrame() -> CGRect? {
+        guard
+            let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }),
+            let left = screen.auxiliaryTopLeftArea,
+            let right = screen.auxiliaryTopRightArea
+        else {
+            return nil
+        }
+        return CGRect(x: left.maxX, y: 0, width: max(right.minX - left.maxX, 0), height: screen.frame.height)
+    }
+
+    private static func crossesNotch(_ source: CGRect, _ target: CGRect, notch: CGRect?) -> Bool {
+        guard let notch, notch.width > 0 else { return false }
+        return (source.midX < notch.minX && target.midX > notch.maxX)
+            || (source.midX > notch.maxX && target.midX < notch.minX)
+    }
+
+    private static func logMove(_ message: String) {
+        NSLog("HiddenBarMove: \(message)")
+        let line = "\(Date()) \(message)\n"
+        let url = URL(fileURLWithPath: "/tmp/hidden-icon-move.log")
+        guard let data = line.data(using: .utf8) else { return }
+        if FileManager.default.fileExists(atPath: url.path), let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            try? data.write(to: url)
+        }
     }
 
     private static func menuBarWindows() -> [[String: Any]] {
@@ -523,7 +574,7 @@ enum MenuBarItemMover {
     }
 
     private static func waitForMove(windowNumber: Int, from initialRect: CGRect) -> CGRect? {
-        let deadline = Date().addingTimeInterval(0.18)
+        let deadline = Date().addingTimeInterval(0.28)
         var latest = currentRect(windowNumber: windowNumber)
         while Date() < deadline {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))

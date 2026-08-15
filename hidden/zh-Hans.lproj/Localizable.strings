@@ -30,6 +30,7 @@
 "Couldn't find a drop target in the menu bar." = "找不到菜单栏中的放置位置。";
 "Moving %@…" = "正在移动 %@…";
 "Couldn't move that item. Try again after refreshing." = "无法移动该图标，请刷新后再试。";
+"Couldn't move that item across the notch." = "无法把该图标拖过刘海。";
 "Sound" = "声音";
 "Now Playing" = "正在播放";
 "Wi-Fi" = "Wi-Fi";

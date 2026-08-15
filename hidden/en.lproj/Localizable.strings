@@ -30,6 +30,7 @@
 "Couldn't find a drop target in the menu bar." = "Couldn't find a drop target in the menu bar.";
 "Moving %@…" = "Moving %@…";
 "Couldn't move that item. Try again after refreshing." = "Couldn't move that item. Try again after refreshing.";
+"Couldn't move that item across the notch." = "Couldn't move that item across the notch.";
 "Sound" = "Sound";
 "Now Playing" = "Now Playing";
 "Wi-Fi" = "Wi-Fi";

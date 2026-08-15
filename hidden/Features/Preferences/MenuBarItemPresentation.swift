@@ -210,6 +210,41 @@ enum MenuBarItemPresentation {
         return !skipPrefixes.contains { id == $0 || id.hasPrefix($0 + ".") }
     }
 
+    static func wellBackground(for image: NSImage?) -> NSColor {
+        guard
+            let image,
+            let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+            isColorful(cgImage)
+        else {
+            return NSColor(calibratedWhite: 0.28, alpha: 1)
+        }
+        return NSColor(calibratedWhite: 0.9, alpha: 1)
+    }
+
+    static func isColorful(_ image: CGImage) -> Bool {
+        let width = min(Int(image.width), 24)
+        let height = min(Int(image.height), 24)
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return false
+        }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return stride(from: 0, to: pixels.count, by: 4).contains { index in
+            guard pixels[index + 3] > 24 else { return false }
+            let maxChannel = max(pixels[index], max(pixels[index + 1], pixels[index + 2]))
+            let minChannel = min(pixels[index], min(pixels[index + 1], pixels[index + 2]))
+            return Int(maxChannel) - Int(minChannel) > 40
+        }
+    }
+
     static func rowIcon(windowSnapshot: NSImage?, appIcon: NSImage?, isSystemExtra: Bool = true) -> NSImage? {
         if let snapshot = isUsableSnapshot(windowSnapshot) ? windowSnapshot : nil {
             return tightened(snapshot)

@@ -263,16 +263,18 @@ final class MenuBarItemManagerViewController: NSViewController {
 
         isBusy = true
         statusLabel.stringValue = String(format: "Moving %@…".localized, item.primaryName)
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let moved = MenuBarItemMover.move(item, relation: relation)
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.statusLabel.stringValue = moved
-                    ? "Drop an item to apply the real menu bar position.".localized
-                    : "Couldn't move that item. Try again after refreshing.".localized
-                self.isBusy = false
-                self.refresh(reuseLayout: true)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            switch MenuBarItemMover.move(item, relation: relation) {
+            case .moved, .alreadyThere:
+                self.statusLabel.stringValue = "Drop an item to apply the real menu bar position.".localized
+            case .crossedNotch:
+                self.statusLabel.stringValue = "Couldn't move that item across the notch.".localized
+            case .missingWindows, .timedOut:
+                self.statusLabel.stringValue = "Couldn't move that item. Try again after refreshing.".localized
             }
+            self.isBusy = false
+            self.refresh(reuseLayout: true)
         }
     }
 }
@@ -287,7 +289,7 @@ extension MenuBarItemManagerViewController: NSTableViewDataSource, NSTableViewDe
         let cell = NSTableCellView()
         let well = NSView()
         well.wantsLayer = true
-        well.layer?.backgroundColor = NSColor(calibratedWhite: 0.12, alpha: 1).cgColor
+        well.layer?.backgroundColor = MenuBarItemPresentation.wellBackground(for: item.icon).cgColor
         well.layer?.cornerRadius = 5
         well.layer?.masksToBounds = true
         let imageView = NSImageView()
