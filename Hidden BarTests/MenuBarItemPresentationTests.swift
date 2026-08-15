@@ -201,6 +201,25 @@ final class MenuBarItemPresentationTests: XCTestCase {
         XCTAssertEqual(MenuBarItemPresentation.section(itemMidX: 900, separatorMidX: 798), .visible)
     }
 
+    func testVisibleBoundsIgnoresTransparentPadding() {
+        let image = CGImage(
+            width: 8,
+            height: 8,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: 32,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: CGDataProvider(data: Data(
+                repeating: 0, count: 8 * 8 * 4
+            ) as CFData)!,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )!
+        XCTAssertNil(MenuBarItemPresentation.visibleBounds(of: image))
+    }
+
     func testDoesNotFallBackToSharedAppIcon() {
         let appIcon = NSImage(size: NSSize(width: 16, height: 16))
         XCTAssertNil(MenuBarItemPresentation.rowIcon(windowSnapshot: nil, appIcon: appIcon, isSystemExtra: true))

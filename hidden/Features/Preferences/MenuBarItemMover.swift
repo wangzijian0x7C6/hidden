@@ -41,6 +41,8 @@ enum NativeMenuBarRelation {
 
 enum MenuBarItemMover {
     private static let menuBarItemWindowIDField = CGEventField(rawValue: 0x33)!
+    private static let iconLock = NSLock()
+    private static var iconCache: [Int: (NSImage, Date)] = [:]
 
     static func extras(layout: MenuBarManagementLayout) -> [ManagedMenuBarItem] {
         let ownPID = ProcessInfo.processInfo.processIdentifier
@@ -165,7 +167,7 @@ enum MenuBarItemMover {
         defer {
             if let cursor { CGWarpMouseCursorPosition(cursor) }
         }
-        for _ in 1...3 {
+        for _ in 1...2 {
             guard
                 let sourceRect = currentRect(windowNumber: item.windowNumber),
                 let targetRect = currentRect(windowNumber: relation.targetWindowNumber)
@@ -347,8 +349,18 @@ enum MenuBarItemMover {
     }
 
     private static func captureIcon(windowNumber: Int) -> NSImage? {
+        iconLock.lock()
+        if let cached = iconCache[windowNumber], Date().timeIntervalSince(cached.1) < 4 {
+            let image = cached.0
+            iconLock.unlock()
+            return image
+        }
+        iconLock.unlock()
         for _ in 1...2 {
             if let image = snapshotImage(windowNumber: windowNumber) {
+                iconLock.lock()
+                iconCache[windowNumber] = (image, Date())
+                iconLock.unlock()
                 return image
             }
         }
@@ -511,7 +523,7 @@ enum MenuBarItemMover {
     }
 
     private static func waitForMove(windowNumber: Int, from initialRect: CGRect) -> CGRect? {
-        let deadline = Date().addingTimeInterval(0.55)
+        let deadline = Date().addingTimeInterval(0.18)
         var latest = currentRect(windowNumber: windowNumber)
         while Date() < deadline {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))

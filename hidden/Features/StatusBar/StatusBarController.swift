@@ -294,10 +294,7 @@ class StatusBarController {
     }
 
     func prepareForItemManagement(completion: @escaping (MenuBarManagementLayout) -> Void) {
-        if isCollapsed {
-            expandMenubar()
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+        let deliver: () -> Void = { [weak self] in
             guard
                 let self,
                 let separatorFrame = self.btnSeparate.button?.window?.frame,
@@ -307,6 +304,12 @@ class StatusBarController {
                 separatorFrame: separatorFrame,
                 expandCollapseFrame: expandCollapseFrame
             ))
+        }
+        if isCollapsed {
+            expandMenubar()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: deliver)
+        } else {
+            deliver()
         }
     }
     

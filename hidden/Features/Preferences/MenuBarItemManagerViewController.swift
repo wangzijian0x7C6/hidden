@@ -12,13 +12,13 @@ final class MenuBarItemManagerViewController: NSViewController {
     private let visibleCountLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(wrappingLabelWithString: "")
     private let permissionButton = NSButton(title: "Grant Access".localized, target: nil, action: nil)
-    private let refreshButton = NSButton(title: "Refresh".localized, target: nil, action: nil)
     private var hiddenItems: [ManagedMenuBarItem] = []
     private var visibleItems: [ManagedMenuBarItem] = []
     private var layout: MenuBarManagementLayout?
     private var separatorWindowNumber: Int?
     private var expandCollapseWindowNumber: Int?
     private var isBusy = false
+    private var autoRefreshTimer: Timer?
 
     init() {
         super.init(nibName: nil, bundle: nil)
@@ -35,18 +35,29 @@ final class MenuBarItemManagerViewController: NSViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(appDidBecomeActive),
-            name: NSApplication.didBecomeActiveNotification,
-            object: nil
-        )
+        if autoRefreshTimer == nil {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(appDidBecomeActive),
+                name: NSApplication.didBecomeActiveNotification,
+                object: nil
+            )
+            let workspace = NSWorkspace.shared.notificationCenter
+            workspace.addObserver(self, selector: #selector(autoRefresh), name: NSWorkspace.didLaunchApplicationNotification, object: nil)
+            workspace.addObserver(self, selector: #selector(autoRefresh), name: NSWorkspace.didTerminateApplicationNotification, object: nil)
+            autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+                self?.refresh(reuseLayout: true)
+            }
+        }
         refresh()
     }
 
     override func viewDidDisappear() {
         super.viewDidDisappear()
+        autoRefreshTimer?.invalidate()
+        autoRefreshTimer = nil
         NotificationCenter.default.removeObserver(self, name: NSApplication.didBecomeActiveNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
 
     private func buildUI() {
@@ -68,9 +79,6 @@ final class MenuBarItemManagerViewController: NSViewController {
         columns.distribution = .fillEqually
         columns.setContentHuggingPriority(.defaultLow, for: .vertical)
 
-        refreshButton.bezelStyle = .rounded
-        refreshButton.target = self
-        refreshButton.action = #selector(refreshPressed)
         permissionButton.bezelStyle = .rounded
         permissionButton.target = self
         permissionButton.action = #selector(permissionPressed)
@@ -80,7 +88,7 @@ final class MenuBarItemManagerViewController: NSViewController {
         statusLabel.maximumNumberOfLines = 2
         statusLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        let footer = NSStackView(views: [statusLabel, permissionButton, refreshButton])
+        let footer = NSStackView(views: [statusLabel, permissionButton])
         footer.orientation = .horizontal
         footer.alignment = .centerY
         footer.spacing = 8
@@ -106,7 +114,7 @@ final class MenuBarItemManagerViewController: NSViewController {
     private func configure(table: NSTableView, identifier: String) {
         table.identifier = NSUserInterfaceItemIdentifier(identifier)
         table.headerView = nil
-        table.rowHeight = 28
+        table.rowHeight = 32
         table.usesAlternatingRowBackgroundColors = true
         table.allowsMultipleSelection = false
         table.dataSource = self
@@ -146,8 +154,8 @@ final class MenuBarItemManagerViewController: NSViewController {
         return stack
     }
 
-    @objc private func refreshPressed() {
-        refresh()
+    @objc private func autoRefresh() {
+        refresh(reuseLayout: true)
     }
 
     @objc private func appDidBecomeActive() {
@@ -171,12 +179,10 @@ final class MenuBarItemManagerViewController: NSViewController {
         statusLabel.stringValue = "Enable Hidden Bar in System Settings, then return and refresh.".localized
     }
 
-    private func refresh() {
+    private func refresh(reuseLayout: Bool = false) {
         guard !isBusy, let appDelegate = NSApp.delegate as? AppDelegate else { return }
         isBusy = true
-        refreshButton.isEnabled = false
-        statusLabel.stringValue = "Scanning menu bar items…".localized
-        appDelegate.statusBarController.prepareForItemManagement { [weak self] layout in
+        let scan: (MenuBarManagementLayout) -> Void = { [weak self] layout in
             guard let self else { return }
             self.layout = layout
             let ownPID = ProcessInfo.processInfo.processIdentifier
@@ -189,6 +195,11 @@ final class MenuBarItemManagerViewController: NSViewController {
                     self?.apply(items, accessibilityTrusted: trusted)
                 }
             }
+        }
+        if reuseLayout, let layout {
+            scan(layout)
+        } else {
+            appDelegate.statusBarController.prepareForItemManagement(completion: scan)
         }
     }
 
@@ -210,7 +221,6 @@ final class MenuBarItemManagerViewController: NSViewController {
                 : "Drop an item to apply the real menu bar position.".localized
         }
         isBusy = false
-        refreshButton.isEnabled = true
     }
 
     private func items(for table: NSTableView) -> [ManagedMenuBarItem] {
@@ -218,7 +228,9 @@ final class MenuBarItemManagerViewController: NSViewController {
     }
 
     private func move(_ item: ManagedMenuBarItem, to table: NSTableView, row: Int) {
-        let destination = items(for: table).filter { $0.id != item.id }
+        hiddenItems.removeAll { $0.id == item.id }
+        visibleItems.removeAll { $0.id == item.id }
+        let destination = items(for: table)
         let clampedRow = max(0, min(row, destination.count))
         let relation: NativeMenuBarRelation?
         if destination.isEmpty {
@@ -234,6 +246,15 @@ final class MenuBarItemManagerViewController: NSViewController {
         } else {
             relation = .leftOf(windowNumber: destination[clampedRow].windowNumber)
         }
+        if table === hiddenTable {
+            hiddenItems.insert(item, at: clampedRow)
+        } else {
+            visibleItems.insert(item, at: clampedRow)
+        }
+        hiddenTable.reloadData()
+        visibleTable.reloadData()
+        hiddenCountLabel.stringValue = "\(hiddenItems.count)"
+        visibleCountLabel.stringValue = "\(visibleItems.count)"
 
         guard let relation else {
             statusLabel.stringValue = "Couldn't find a drop target in the menu bar.".localized
@@ -241,15 +262,17 @@ final class MenuBarItemManagerViewController: NSViewController {
         }
 
         isBusy = true
-        refreshButton.isEnabled = false
         statusLabel.stringValue = String(format: "Moving %@…".localized, item.primaryName)
-        let moved = MenuBarItemMover.move(item, relation: relation)
-        statusLabel.stringValue = moved
-            ? "Drop an item to apply the real menu bar position.".localized
-            : "Couldn't move that item. Try again after refreshing.".localized
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            self?.isBusy = false
-            self?.refresh()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let moved = MenuBarItemMover.move(item, relation: relation)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.statusLabel.stringValue = moved
+                    ? "Drop an item to apply the real menu bar position.".localized
+                    : "Couldn't move that item. Try again after refreshing.".localized
+                self.isBusy = false
+                self.refresh(reuseLayout: true)
+            }
         }
     }
 }
@@ -262,24 +285,32 @@ extension MenuBarItemManagerViewController: NSTableViewDataSource, NSTableViewDe
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let item = items(for: tableView)[row]
         let cell = NSTableCellView()
+        let well = NSView()
+        well.wantsLayer = true
+        well.layer?.backgroundColor = NSColor(calibratedWhite: 0.12, alpha: 1).cgColor
+        well.layer?.cornerRadius = 5
+        well.layer?.masksToBounds = true
         let imageView = NSImageView()
         imageView.image = item.icon
         imageView.imageScaling = .scaleProportionallyUpOrDown
-        imageView.wantsLayer = true
-        imageView.layer?.backgroundColor = NSColor.quaternaryLabelColor.cgColor
-        imageView.layer?.cornerRadius = 4
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        well.addSubview(imageView)
         let label = NSTextField(labelWithString: item.primaryName)
         label.lineBreakMode = .byTruncatingTail
         label.font = .systemFont(ofSize: NSFont.systemFontSize)
-        let stack = NSStackView(views: [imageView, label])
+        let stack = NSStackView(views: [well, label])
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
         cell.addSubview(stack)
         NSLayoutConstraint.activate([
-            imageView.widthAnchor.constraint(equalToConstant: 22),
-            imageView.heightAnchor.constraint(equalToConstant: 22),
+            well.widthAnchor.constraint(equalToConstant: 26),
+            well.heightAnchor.constraint(equalToConstant: 26),
+            imageView.leadingAnchor.constraint(equalTo: well.leadingAnchor, constant: 3),
+            imageView.trailingAnchor.constraint(equalTo: well.trailingAnchor, constant: -3),
+            imageView.topAnchor.constraint(equalTo: well.topAnchor, constant: 3),
+            imageView.bottomAnchor.constraint(equalTo: well.bottomAnchor, constant: -3),
             stack.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 6),
             stack.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
             stack.centerYAnchor.constraint(equalTo: cell.centerYAnchor)

@@ -19,7 +19,7 @@
 "Grant Access" = "授予權限";
 "Unknown" = "未知";
 "Drag items within a list to reorder them, or between lists to hide and show them." = "在列表內拖曳可排序，在兩欄之間拖曳可隱藏或顯示。";
-"Enable Hidden Bar in System Settings, then return and refresh." = "請在系統設定中啟用 Hidden Bar，返回後再重新整理。";
+"Enable Hidden Bar in System Settings, then return and refresh." = "請在系統設定中啟用 Hidden Bar，返回後會自動更新。";
 "Scanning menu bar items…" = "正在掃描選單列圖示…";
 "Accessibility permission is required to list and move menu bar items." = "列出和移動選單列圖示需要輔助使用權限。";
 "Grant Accessibility to show names and move items." = "授予輔助使用權限後才能顯示名稱並移動圖示。";

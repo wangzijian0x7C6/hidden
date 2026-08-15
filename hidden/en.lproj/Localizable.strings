@@ -19,7 +19,7 @@
 "Grant Access" = "Grant Access";
 "Unknown" = "Unknown";
 "Drag items within a list to reorder them, or between lists to hide and show them." = "Drag items within a list to reorder them, or between lists to hide and show them.";
-"Enable Hidden Bar in System Settings, then return and refresh." = "Enable Hidden Bar in System Settings, then return and refresh.";
+"Enable Hidden Bar in System Settings, then return and refresh." = "Enable Hidden Bar in System Settings, then return. The list updates automatically.";
 "Scanning menu bar items…" = "Scanning menu bar items…";
 "Accessibility permission is required to list and move menu bar items." = "Accessibility permission is required to list and move menu bar items.";
 "Grant Accessibility to show names and move items." = "Grant Accessibility to show names and move items.";
