@@ -269,10 +269,11 @@ enum MenuBarItemMover {
             AXUIElementSetMessagingTimeout(axApp, 0.8)
             var extrasValue: AnyObject?
             guard AXUIElementCopyAttributeValue(axApp, "AXExtrasMenuBar" as CFString, &extrasValue) == .success,
-                  let extrasBar = extrasValue as? AXUIElement
+                  extrasValue != nil
             else {
                 continue
             }
+            let extrasBar = extrasValue as! AXUIElement
             let sourceName = apps[pid]?.localizedName ?? "Unknown".localized
             var collected: [(title: String?, x: CGFloat, width: CGFloat, identifier: String?)] = []
             collectExtras(from: extrasBar, into: &collected, depth: 0)
