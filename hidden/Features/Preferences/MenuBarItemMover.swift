@@ -169,8 +169,50 @@ enum MenuBarItemMover {
         case timedOut
     }
 
-    static func move(_ item: ManagedMenuBarItem, relation: NativeMenuBarRelation) -> MoveResult {
-        logMove("begin \(item.title) pid=\(item.pid) window=\(item.windowNumber) target=\(relation.targetWindowNumber)")
+    static func move(
+        _ item: ManagedMenuBarItem,
+        relation: NativeMenuBarRelation,
+        destination: MenuBarItemSection,
+        separatorWindowNumber: Int?
+    ) -> MoveResult {
+        logMove("begin \(item.title) pid=\(item.pid) window=\(item.windowNumber) target=\(relation.targetWindowNumber) dest=\(destination)")
+        if destination == .hidden {
+            return moveToHidden(item, relation: relation, separatorWindowNumber: separatorWindowNumber)
+        }
+        return moveToVisible(item, relation: relation)
+    }
+
+    private static func moveToHidden(
+        _ item: ManagedMenuBarItem,
+        relation: NativeMenuBarRelation,
+        separatorWindowNumber: Int?
+    ) -> MoveResult {
+        var relation = relation
+        if let target = currentRect(windowNumber: relation.targetWindowNumber),
+           let notch = notchFrame(),
+           (MenuBarItemPresentation.intersectsNotch(target, notch: notch) || target.maxX <= notch.minX + 1),
+           let separatorWindowNumber {
+            logMove("hide retargets to separator")
+            relation = .leftOf(windowNumber: separatorWindowNumber)
+        }
+        let result = executeMove(item, relation: relation, addingToTrailing: false)
+        if hiddenSucceeded(item, separatorWindowNumber: separatorWindowNumber) {
+            return .moved
+        }
+        if let separatorWindowNumber, relation.targetWindowNumber != separatorWindowNumber {
+            logMove("hide retry via separator")
+            _ = executeMove(item, relation: .leftOf(windowNumber: separatorWindowNumber), addingToTrailing: false)
+            if hiddenSucceeded(item, separatorWindowNumber: separatorWindowNumber) {
+                return .moved
+            }
+        }
+        return result
+    }
+
+    private static func moveToVisible(
+        _ item: ManagedMenuBarItem,
+        relation: NativeMenuBarRelation
+    ) -> MoveResult {
         guard
             let sourceRect = currentRect(windowNumber: item.windowNumber),
             let targetRect = currentRect(windowNumber: relation.targetWindowNumber)
@@ -181,47 +223,78 @@ enum MenuBarItemMover {
         if satisfies(sourceRect, relation: relation, targetRect: targetRect) {
             return .alreadyThere
         }
-        let notch = notchFrame()
-        if crossesNotch(sourceRect, targetRect, notch: notch) {
-            let addingToTrailing = MenuBarItemPresentation.isMovingOntoTrailingSide(
-                sourceMidX: sourceRect.midX,
-                targetMidX: targetRect.midX,
-                notch: notch
-            )
-            if MenuBarItemPresentation.shouldBlockAsTrailingFull(
-                sourceMidX: sourceRect.midX,
-                targetMidX: targetRect.midX,
-                notch: notch,
-                trailingIsFull: isTrailingFull(for: sourceRect.width)
-            ) {
-                logMove("trailing side is full width=\(sourceRect.width) addingToTrailing=\(addingToTrailing)")
-                return .full
-            }
+        if item.section == .hidden, collapsedTrailingIsFull(for: sourceRect.width) {
+            logMove("collapsed trailing side is full width=\(sourceRect.width)")
+            return .full
+        }
+        return executeMove(item, relation: relation, addingToTrailing: true)
+    }
+
+    private static func executeMove(
+        _ item: ManagedMenuBarItem,
+        relation: NativeMenuBarRelation,
+        addingToTrailing: Bool
+    ) -> MoveResult {
+        guard
+            let sourceRect = currentRect(windowNumber: item.windowNumber),
+            let targetRect = currentRect(windowNumber: relation.targetWindowNumber)
+        else {
+            logMove("missing windows")
+            return .missingWindows
+        }
+        if MenuBarItemPresentation.pathCrossesNotch(from: sourceRect.midX, to: targetRect.midX, notch: notchFrame()) {
             guard let controller = (NSApp.delegate as? AppDelegate)?.statusBarController else {
                 return .crossedNotch
             }
-            logMove("make room then move addingToTrailing=\(addingToTrailing)")
+            logMove("make room then move")
             return controller.withRoomForNotchCrossing(until: {
                 guard
                     let source = currentRect(windowNumber: item.windowNumber),
                     let target = currentRect(windowNumber: relation.targetWindowNumber)
                 else { return false }
-                return !crossesNotch(source, target, notch: notchFrame())
+                return !MenuBarItemPresentation.pathCrossesNotch(
+                    from: source.midX,
+                    to: target.midX,
+                    notch: notchFrame()
+                )
             }) {
                 performMove(item, relation: relation, addingToTrailing: addingToTrailing)
             }
         }
-        return performMove(item, relation: relation, addingToTrailing: false)
+        return performMove(item, relation: relation, addingToTrailing: addingToTrailing)
+    }
+
+    private static func hiddenSucceeded(_ item: ManagedMenuBarItem, separatorWindowNumber: Int?) -> Bool {
+        guard
+            let itemRect = currentRect(windowNumber: item.windowNumber),
+            let separator = separatorWindowNumber.flatMap({ currentRect(windowNumber: $0) })
+        else { return false }
+        return MenuBarItemPresentation.isInHiddenSection(itemMidX: itemRect.midX, separatorMidX: separator.midX)
     }
 
     static func unclipExtras() {
         guard let notch = notchFrame() else { return }
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let separatorWindowNumber = (NSApp.delegate as? AppDelegate).flatMap { delegate in
+            delegate.statusBarController.ownItemFrames().flatMap { own in
+                windowNumber(ownedBy: ownPID, nearestAppKitFrame: own.separator)
+            }
+        }
         let windows = menuBarWindows().compactMap { info -> (windowNumber: Int, pid: pid_t, rect: CGRect)? in
             guard
                 let pid = intValue(info[kCGWindowOwnerPID as String]).map(pid_t.init),
                 let windowNumber = intValue(info[kCGWindowNumber as String]),
                 let bounds = info[kCGWindowBounds as String] as? [String: Any],
-                let rect = rect(from: bounds)
+                let rect = rect(from: bounds),
+                MenuBarItemPresentation.isManageableExtra(
+                    ownerPID: pid,
+                    ownPID: ownPID,
+                    layer: intValue(info[kCGWindowLayer as String]),
+                    width: rect.width,
+                    height: rect.height,
+                    windowName: info[kCGWindowName as String] as? String,
+                    ownerName: info[kCGWindowOwnerName as String] as? String
+                )
             else { return nil }
             return (windowNumber, pid, rect)
         }
@@ -234,11 +307,13 @@ enum MenuBarItemMover {
                     .filter { $0.windowNumber != window.windowNumber && $0.rect.maxX <= notch.minX + 1 }
                     .max { $0.rect.maxX < $1.rect.maxX }
                 relation = neighbor.map { .rightOf(windowNumber: $0.windowNumber) }
+                    ?? separatorWindowNumber.map { .leftOf(windowNumber: $0) }
             } else {
                 neighbor = windows
                     .filter { $0.windowNumber != window.windowNumber && $0.rect.minX >= notch.maxX - 1 }
                     .min { $0.rect.minX < $1.rect.minX }
                 relation = neighbor.map { .leftOf(windowNumber: $0.windowNumber) }
+                    ?? separatorWindowNumber.map { .leftOf(windowNumber: $0) }
             }
             guard let relation else {
                 logMove("unclip window=\(window.windowNumber) has no neighbor targetMinX=\(targetMinX)")
@@ -320,27 +395,31 @@ enum MenuBarItemMover {
         return CGRect(x: left.maxX, y: 0, width: max(right.minX - left.maxX, 0), height: screen.frame.height)
     }
 
-    private static func isTrailingFull(for itemWidth: CGFloat) -> Bool {
+    private static func collapsedTrailingIsFull(for itemWidth: CGFloat) -> Bool {
         guard
-            let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }),
-            let right = screen.auxiliaryTopRightArea,
-            let notch = notchFrame()
+            let notch = notchFrame(),
+            let controller = (NSApp.delegate as? AppDelegate)?.statusBarController,
+            let own = controller.ownItemFrames()
         else {
             return false
         }
-        let rightItems = menuBarWindows().compactMap { info -> CGRect? in
+        let shown = menuBarWindows().compactMap { info -> CGRect? in
             guard
                 let bounds = info[kCGWindowBounds as String] as? [String: Any],
-                let rect = rect(from: bounds)
+                let rect = rect(from: bounds),
+                rect.midX > own.separator.midX
             else { return nil }
             return rect
         }
-        guard let leftmostMinX = MenuBarItemPresentation.leftmostTrailingMinX(frames: rightItems, notch: notch) else {
+        guard let leftmostShownMinX = shown.map(\.minX).min() else {
             return false
         }
-        return !MenuBarItemPresentation.trailingHasRoom(
-            usableMinX: right.minX,
-            leftmostItemMinX: leftmostMinX,
+        let chrome = controller.collapsedChromeWidths()
+        return !MenuBarItemPresentation.collapsedTrailingHasRoom(
+            notchMaxX: notch.maxX,
+            separatorWidth: chrome.separator,
+            expandWidth: chrome.expand,
+            leftmostShownMinX: leftmostShownMinX,
             itemWidth: itemWidth
         )
     }
@@ -702,7 +781,7 @@ enum MenuBarItemMover {
     }
 
     private static func waitForMove(windowNumber: Int, from initialRect: CGRect) -> CGRect? {
-        let deadline = Date().addingTimeInterval(0.14)
+        let deadline = Date().addingTimeInterval(0.22)
         var latest = currentRect(windowNumber: windowNumber)
         while Date() < deadline {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))

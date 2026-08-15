@@ -294,6 +294,13 @@ class StatusBarController {
         }
     }
 
+    func collapsedChromeWidths() -> (separator: CGFloat, expand: CGFloat) {
+        if let saved = managementChrome {
+            return (saved.separate, saved.expand)
+        }
+        return (btnSeparate.length, btnExpandCollapse.length)
+    }
+
     func ownItemFrames() -> (separator: CGRect, expand: CGRect)? {
         guard
             let separator = btnSeparate.button?.window?.frame,

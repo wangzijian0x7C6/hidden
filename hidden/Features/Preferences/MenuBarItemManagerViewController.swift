@@ -369,7 +369,12 @@ final class MenuBarItemManagerViewController: NSViewController {
         isBusy = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            let result = MenuBarItemMover.move(item, relation: relation)
+            let result = MenuBarItemMover.move(
+                item,
+                relation: relation,
+                destination: table === hiddenTable ? .hidden : .visible,
+                separatorWindowNumber: separatorWindowNumber
+            )
             self.isBusy = false
             switch result {
             case .moved, .alreadyThere:

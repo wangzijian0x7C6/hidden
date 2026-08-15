@@ -201,6 +201,35 @@ final class MenuBarItemPresentationTests: XCTestCase {
         XCTAssertTrue(MenuBarItemPresentation.trailingHasRoom(usableMinX: 800, leftmostItemMinX: 860, itemWidth: 37))
     }
 
+    func testCollapsedRoomUsesShownItemsNotExpandedHiddenOnes() {
+        XCTAssertTrue(
+            MenuBarItemPresentation.collapsedTrailingHasRoom(
+                notchMaxX: 798,
+                separatorWidth: 20,
+                expandWidth: 18,
+                leftmostShownMinX: 1000,
+                itemWidth: 31
+            )
+        )
+        XCTAssertFalse(
+            MenuBarItemPresentation.collapsedTrailingHasRoom(
+                notchMaxX: 798,
+                separatorWidth: 20,
+                expandWidth: 18,
+                leftmostShownMinX: 840,
+                itemWidth: 31
+            )
+        )
+    }
+
+    func testPathThroughTheNotchCountsAsCrossing() {
+        let notch = CGRect(x: 642, y: 0, width: 156, height: 32)
+        XCTAssertTrue(MenuBarItemPresentation.pathCrossesNotch(from: 1000, to: 661, notch: notch))
+        XCTAssertTrue(MenuBarItemPresentation.pathCrossesNotch(from: 664, to: 987, notch: notch))
+        XCTAssertFalse(MenuBarItemPresentation.pathCrossesNotch(from: 973, to: 1102, notch: notch))
+        XCTAssertFalse(MenuBarItemPresentation.pathCrossesNotch(from: 580, to: 600, notch: notch))
+    }
+
     func testHidingAcrossTheNotchIsNeverTrailingFull() {
         let notch = CGRect(x: 642, y: 0, width: 156, height: 32)
         XCTAssertFalse(

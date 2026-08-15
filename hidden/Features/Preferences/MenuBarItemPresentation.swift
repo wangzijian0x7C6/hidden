@@ -191,6 +191,27 @@ enum MenuBarItemPresentation {
         leftmostItemMinX - usableMinX >= itemWidth + 2
     }
 
+    static func collapsedTrailingHasRoom(
+        notchMaxX: CGFloat,
+        separatorWidth: CGFloat,
+        expandWidth: CGFloat,
+        leftmostShownMinX: CGFloat,
+        itemWidth: CGFloat
+    ) -> Bool {
+        leftmostShownMinX - notchMaxX - separatorWidth - expandWidth >= itemWidth + 2
+    }
+
+    static func pathCrossesNotch(from sourceMidX: CGFloat, to targetMidX: CGFloat, notch: CGRect?) -> Bool {
+        guard let notch, notch.width > 0 else { return false }
+        let left = min(sourceMidX, targetMidX)
+        let right = max(sourceMidX, targetMidX)
+        return left < notch.maxX - 1 && right > notch.minX + 1 && (right - left) > 8
+    }
+
+    static func isInHiddenSection(itemMidX: CGFloat, separatorMidX: CGFloat) -> Bool {
+        itemMidX < separatorMidX
+    }
+
     static func isMovingOntoTrailingSide(sourceMidX: CGFloat, targetMidX: CGFloat, notch: CGRect?) -> Bool {
         guard let notch, notch.width > 0 else { return false }
         return sourceMidX < notch.minX && targetMidX > notch.maxX
