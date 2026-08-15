@@ -411,7 +411,7 @@ enum MenuBarItemMover {
             else {
                 continue
             }
-            let extrasBar = extrasValue as AXUIElement
+            let extrasBar = unsafeBitCast(extrasValue, to: AXUIElement.self)
             let sourceName = apps[pid]?.localizedName ?? "Unknown".localized
             var collected: [(title: String?, x: CGFloat, width: CGFloat, identifier: String?)] = []
             collectExtras(from: extrasBar, into: &collected, depth: 0)
