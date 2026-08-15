@@ -17,6 +17,13 @@
 "Visible" = "Visible";
 "Refresh" = "Refresh";
 "Grant Access" = "Grant Access";
+"Grant Accessibility" = "Grant Accessibility";
+"Grant Screen Recording" = "Grant Screen Recording";
+"Accessibility and Screen Recording are both required." = "Accessibility and Screen Recording are both required.";
+"Accessibility is required to name and move menu bar items." = "Accessibility is required to name and move menu bar items.";
+"Screen Recording is required to show menu bar icons." = "Screen Recording is required to show menu bar icons.";
+"Accessibility is required. Enable Hidden Bar in System Settings." = "Accessibility is required. Enable Hidden Bar in System Settings.";
+"Screen Recording is required. Enable Hidden Bar in System Settings." = "Screen Recording is required. Enable Hidden Bar in System Settings.";
 "Unknown" = "Unknown";
 "Drag items within a list to reorder them, or between lists to hide and show them." = "Drag items within a list to reorder them, or between lists to hide and show them.";
 "Enable Hidden Bar in System Settings, then return and refresh." = "Enable Hidden Bar in System Settings, then return. The list updates automatically.";

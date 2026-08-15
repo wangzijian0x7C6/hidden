@@ -182,7 +182,7 @@ enum MenuBarItemMover {
             return .alreadyThere
         }
         if crossesNotch(sourceRect, targetRect, notch: notchFrame()) {
-            if isTrailingFull(for: sourceRect.width) || hasNotchClippedExtra() {
+            if isTrailingFull(for: sourceRect.width) || hasClippedExtra() {
                 logMove("trailing side is full width=\(sourceRect.width)")
                 return .full
             }
@@ -236,8 +236,8 @@ enum MenuBarItemMover {
             let updated = waitForMove(windowNumber: item.windowNumber, from: sourceRect)
             logMove("after drag rect=\(String(describing: updated))")
             if let updated, satisfies(updated, relation: relation, targetRect: currentRect(windowNumber: relation.targetWindowNumber) ?? targetRect) {
-                if hasNotchClippedExtra() {
-                    logMove("move landed but an extra is clipped by the notch")
+                if hasClippedExtra() {
+                    logMove("move landed but an extra is clipped")
                     return .full
                 }
                 logMove("moved")
@@ -286,14 +286,21 @@ enum MenuBarItemMover {
         )
     }
 
-    private static func hasNotchClippedExtra() -> Bool {
-        guard let notch = notchFrame() else { return false }
+    private static func hasClippedExtra() -> Bool {
+        let notch = notchFrame()
+        let own = (NSApp.delegate as? AppDelegate)?.statusBarController.ownItemFrames()
         return menuBarWindows().contains { info in
             guard
                 let bounds = info[kCGWindowBounds as String] as? [String: Any],
                 let rect = rect(from: bounds)
             else { return false }
-            return MenuBarItemPresentation.intersectsNotch(rect, notch: notch)
+            if let notch, MenuBarItemPresentation.intersectsNotch(rect, notch: notch) {
+                return true
+            }
+            if let own, MenuBarItemPresentation.isWedgedBetween(rect, first: own.separator, second: own.expand) {
+                return true
+            }
+            return false
         }
     }
 

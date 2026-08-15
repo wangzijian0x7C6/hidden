@@ -196,6 +196,15 @@ enum MenuBarItemPresentation {
         return rect.maxX > notch.minX + 1 && rect.minX < notch.maxX - 1
     }
 
+    static func isWedgedBetween(_ rect: CGRect, first: CGRect, second: CGRect) -> Bool {
+        let left = first.minX <= second.minX ? first : second
+        let right = first.minX <= second.minX ? second : first
+        let gap = right.minX - left.maxX
+        let overlapsBoth = rect.minX < right.minX && rect.maxX > left.maxX
+        guard overlapsBoth, rect.width > 8 else { return false }
+        return gap + 2 < rect.width
+    }
+
     static func accessibilityPidsToScan(extraPids: [pid_t], runningPids: [pid_t] = [], trusted: Bool) -> [pid_t] {
         guard trusted else { return [] }
         return Array(Set(extraPids + runningPids)).sorted()

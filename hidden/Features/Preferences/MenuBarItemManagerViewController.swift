@@ -164,19 +164,30 @@ final class MenuBarItemManagerViewController: NSViewController {
     }
 
     @objc private func permissionPressed() {
-        let prompt = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
-        AXIsProcessTrustedWithOptions(prompt)
+        if !AXIsProcessTrusted() {
+            let prompt = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+            AXIsProcessTrustedWithOptions(prompt)
+            openPrivacySettings(anchors: [
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            ])
+            statusLabel.stringValue = "Accessibility is required. Enable Hidden Bar in System Settings.".localized
+            return
+        }
         if !CGPreflightScreenCaptureAccess() {
             _ = CGRequestScreenCaptureAccess()
+            openPrivacySettings(anchors: [
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ScreenCapture",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+            ])
+            statusLabel.stringValue = "Screen Recording is required. Enable Hidden Bar in System Settings.".localized
         }
-        let settings = [
-            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-        ]
-        for string in settings {
-            if let url = URL(string: string), NSWorkspace.shared.open(url) { break }
+    }
+
+    private func openPrivacySettings(anchors: [String]) {
+        for string in anchors {
+            if let url = URL(string: string), NSWorkspace.shared.open(url) { return }
         }
-        statusLabel.stringValue = "Enable Hidden Bar in System Settings, then return and refresh.".localized
     }
 
     private func refresh(reuseLayout: Bool = false) {
@@ -213,8 +224,15 @@ final class MenuBarItemManagerViewController: NSViewController {
         let needsAX = !accessibilityTrusted
         let needsScreen = !CGPreflightScreenCaptureAccess()
         permissionButton.isHidden = !needsAX && !needsScreen
-        if needsAX || needsScreen {
-            statusLabel.stringValue = "Grant Accessibility and Screen Recording to show names and icons.".localized
+        if needsAX && needsScreen {
+            permissionButton.title = "Grant Access".localized
+            statusLabel.stringValue = "Accessibility and Screen Recording are both required.".localized
+        } else if needsAX {
+            permissionButton.title = "Grant Accessibility".localized
+            statusLabel.stringValue = "Accessibility is required to name and move menu bar items.".localized
+        } else if needsScreen {
+            permissionButton.title = "Grant Screen Recording".localized
+            statusLabel.stringValue = "Screen Recording is required to show menu bar icons.".localized
         } else {
             statusLabel.stringValue = items.isEmpty
                 ? "No identifiable menu bar items were found.".localized

@@ -293,12 +293,20 @@ class StatusBarController {
         }
     }
 
+    func ownItemFrames() -> (separator: CGRect, expand: CGRect)? {
+        guard
+            let separator = btnSeparate.button?.window?.frame,
+            let expand = btnExpandCollapse.button?.window?.frame
+        else { return nil }
+        return (separator, expand)
+    }
+
     func withRoomForNotchCrossing<T>(until ready: () -> Bool, _ work: () -> T) -> T {
         let separate = btnSeparate.length
         let expand = btnExpandCollapse.length
         let always = btnAlwaysHidden?.length
         btnSeparate.length = 1
-        btnExpandCollapse.length = 1
+        btnExpandCollapse.length = 0
         btnAlwaysHidden?.length = 0
         let deadline = Date().addingTimeInterval(0.16)
         while Date() < deadline, !ready() {

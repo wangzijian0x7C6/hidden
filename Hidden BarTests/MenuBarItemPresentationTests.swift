@@ -201,6 +201,25 @@ final class MenuBarItemPresentationTests: XCTestCase {
         XCTAssertTrue(MenuBarItemPresentation.trailingHasRoom(usableMinX: 800, leftmostItemMinX: 860, itemWidth: 37))
     }
 
+    func testWedgeDetectsIconStuckBetweenSeparatorAndChevron() {
+        let separator = CGRect(x: 900, y: 0, width: 8, height: 29)
+        let expand = CGRect(x: 910, y: 0, width: 18, height: 29)
+        XCTAssertTrue(
+            MenuBarItemPresentation.isWedgedBetween(
+                CGRect(x: 904, y: 0, width: 37, height: 29),
+                first: separator,
+                second: expand
+            )
+        )
+        XCTAssertFalse(
+            MenuBarItemPresentation.isWedgedBetween(
+                CGRect(x: 940, y: 0, width: 37, height: 29),
+                first: separator,
+                second: expand
+            )
+        )
+    }
+
     func testNotchIntersectionDetectsHalfClippedIcons() {
         let notch = CGRect(x: 642, y: 0, width: 156, height: 32)
         XCTAssertTrue(MenuBarItemPresentation.intersectsNotch(CGRect(x: 620, y: 0, width: 37, height: 29), notch: notch))

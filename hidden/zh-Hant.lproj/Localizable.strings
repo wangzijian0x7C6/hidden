@@ -17,6 +17,13 @@
 "Visible" = "顯示";
 "Refresh" = "重新整理";
 "Grant Access" = "授予權限";
+"Grant Accessibility" = "授予輔助使用";
+"Grant Screen Recording" = "授予螢幕錄製";
+"Accessibility and Screen Recording are both required." = "必須同時授予輔助使用和螢幕錄製。";
+"Accessibility is required to name and move menu bar items." = "必須授予輔助使用後才能識別和移動圖示。";
+"Screen Recording is required to show menu bar icons." = "必須授予螢幕錄製後才能顯示圖示。";
+"Accessibility is required. Enable Hidden Bar in System Settings." = "輔助使用是必須的，請在系統設定中打開 Hidden Bar。";
+"Screen Recording is required. Enable Hidden Bar in System Settings." = "螢幕錄製是必須的，請在系統設定中打開 Hidden Bar。";
 "Unknown" = "未知";
 "Drag items within a list to reorder them, or between lists to hide and show them." = "在列表內拖曳可排序，在兩欄之間拖曳可隱藏或顯示。";
 "Enable Hidden Bar in System Settings, then return and refresh." = "請在系統設定中啟用 Hidden Bar，返回後會自動更新。";
