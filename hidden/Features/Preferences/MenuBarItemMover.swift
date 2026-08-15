@@ -170,28 +170,37 @@ enum MenuBarItemMover {
 
     static func move(_ item: ManagedMenuBarItem, relation: NativeMenuBarRelation) -> MoveResult {
         logMove("begin \(item.title) pid=\(item.pid) window=\(item.windowNumber) target=\(relation.targetWindowNumber)")
-        CGDisplayHideCursor(CGMainDisplayID())
-        defer { CGDisplayShowCursor(CGMainDisplayID()) }
-        let cursor = CGEvent(source: nil)?.location
-        defer {
-            if let cursor { CGWarpMouseCursorPosition(cursor) }
+        guard
+            let sourceRect = currentRect(windowNumber: item.windowNumber),
+            let targetRect = currentRect(windowNumber: relation.targetWindowNumber)
+        else {
+            logMove("missing windows")
+            return .missingWindows
         }
-        let first = performMove(item, relation: relation)
-        if first != .crossedNotch {
-            return first
+        if satisfies(sourceRect, relation: relation, targetRect: targetRect) {
+            return .alreadyThere
         }
-        guard let controller = (NSApp.delegate as? AppDelegate)?.statusBarController else {
-            return first
+        if crossesNotch(sourceRect, targetRect, notch: notchFrame()) {
+            guard let controller = (NSApp.delegate as? AppDelegate)?.statusBarController else {
+                return .crossedNotch
+            }
+            logMove("make room then move")
+            return controller.withRoomForNotchCrossing(until: {
+                guard
+                    let source = currentRect(windowNumber: item.windowNumber),
+                    let target = currentRect(windowNumber: relation.targetWindowNumber)
+                else { return false }
+                return !crossesNotch(source, target, notch: notchFrame())
+            }) {
+                performMove(item, relation: relation)
+            }
         }
-        logMove("retry after clearing our own status items")
-        return controller.withRoomForNotchCrossing {
-            performMove(item, relation: relation)
-        }
+        return performMove(item, relation: relation)
     }
 
     private static func performMove(_ item: ManagedMenuBarItem, relation: NativeMenuBarRelation) -> MoveResult {
         var crossedNotch = false
-        for attempt in 1...3 {
+        for attempt in 1...2 {
             guard
                 let sourceRect = currentRect(windowNumber: item.windowNumber),
                 let targetRect = currentRect(windowNumber: relation.targetWindowNumber)
@@ -208,8 +217,8 @@ enum MenuBarItemMover {
                 return .alreadyThere
             }
             if crosses {
-                logMove("skip drag that would cross the notch")
-                continue
+                logMove("still across the notch")
+                return .crossedNotch
             }
             let points = movePoints(sourceRect: sourceRect, targetRect: targetRect, relation: relation)
             postMove(
@@ -592,7 +601,7 @@ enum MenuBarItemMover {
     }
 
     private static func waitForMove(windowNumber: Int, from initialRect: CGRect) -> CGRect? {
-        let deadline = Date().addingTimeInterval(0.28)
+        let deadline = Date().addingTimeInterval(0.14)
         var latest = currentRect(windowNumber: windowNumber)
         while Date() < deadline {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))

@@ -262,19 +262,20 @@ final class MenuBarItemManagerViewController: NSViewController {
         }
 
         isBusy = true
-        statusLabel.stringValue = String(format: "Moving %@…".localized, item.primaryName)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            switch MenuBarItemMover.move(item, relation: relation) {
+            let result = MenuBarItemMover.move(item, relation: relation)
+            self.isBusy = false
+            switch result {
             case .moved, .alreadyThere:
                 self.statusLabel.stringValue = "Drop an item to apply the real menu bar position.".localized
             case .crossedNotch:
                 self.statusLabel.stringValue = "Couldn't move that item across the notch.".localized
+                self.refresh(reuseLayout: true)
             case .missingWindows, .timedOut:
                 self.statusLabel.stringValue = "Couldn't move that item. Try again after refreshing.".localized
+                self.refresh(reuseLayout: true)
             }
-            self.isBusy = false
-            self.refresh(reuseLayout: true)
         }
     }
 }

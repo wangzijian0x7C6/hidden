@@ -293,21 +293,23 @@ class StatusBarController {
         }
     }
 
-    func withRoomForNotchCrossing<T>(_ work: () -> T) -> T {
+    func withRoomForNotchCrossing<T>(until ready: () -> Bool, _ work: () -> T) -> T {
         let separate = btnSeparate.length
         let expand = btnExpandCollapse.length
         let always = btnAlwaysHidden?.length
         btnSeparate.length = 1
         btnExpandCollapse.length = 1
         btnAlwaysHidden?.length = 0
-        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.25))
+        let deadline = Date().addingTimeInterval(0.16)
+        while Date() < deadline, !ready() {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.016))
+        }
         defer {
             btnSeparate.length = separate
             btnExpandCollapse.length = expand
             if let always {
                 btnAlwaysHidden?.length = always
             }
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.08))
         }
         return work()
     }
