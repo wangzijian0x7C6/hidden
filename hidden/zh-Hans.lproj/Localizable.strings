@@ -40,6 +40,7 @@
 "Couldn't find a drop target in the menu bar." = "找不到菜单栏中的放置位置。";
 "Moving %@…" = "正在移动 %@…";
 "Couldn't move that item. Try again after refreshing." = "无法移动该图标，请刷新后再试。";
+"Couldn't place that item. It was moved back." = "没能放到目标位置，已恢复原处。";
 "Couldn't move that item across the notch." = "无法把该图标拖过刘海。";
 "The right side of the menu bar is full." = "菜单栏右侧已满，请先隐藏一些图标。";
 "Sound" = "声音";

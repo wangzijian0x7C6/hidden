@@ -26,6 +26,7 @@ final class MenuBarItemManagerViewController: NSViewController {
     private var autoRefreshTimer: Timer?
     private var presentWork: DispatchWorkItem?
     private var didRequestScreenCapture = false
+    private var pinnedStatus: String?
 
     init() {
         super.init(nibName: nil, bundle: nil)
@@ -36,12 +37,14 @@ final class MenuBarItemManagerViewController: NSViewController {
     }
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 640, height: 420))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 640, height: 540))
+        preferredContentSize = NSSize(width: 640, height: 540)
         buildUI()
     }
 
     override func viewDidAppear() {
         super.viewDidAppear()
+        resizeWindowToFit()
         if autoRefreshTimer == nil {
             NotificationCenter.default.addObserver(
                 self,
@@ -65,6 +68,17 @@ final class MenuBarItemManagerViewController: NSViewController {
         autoRefreshTimer = nil
         NotificationCenter.default.removeObserver(self, name: NSApplication.didBecomeActiveNotification, object: nil)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
+    }
+
+    private func resizeWindowToFit() {
+        guard let window = view.window else { return }
+        let size = preferredContentSize
+        var content = window.contentRect(forFrameRect: window.frame)
+        guard content.width < size.width || content.height < size.height else { return }
+        content.size = size
+        var frame = window.frameRect(forContentRect: content)
+        frame.origin.y += window.frame.height - frame.height
+        window.setFrame(frame, display: true)
     }
 
     private func buildUI() {
@@ -131,7 +145,7 @@ final class MenuBarItemManagerViewController: NSViewController {
             managerRoot.topAnchor.constraint(equalTo: view.topAnchor, constant: 38),
             managerRoot.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -16),
             columns.widthAnchor.constraint(equalTo: managerRoot.widthAnchor),
-            columns.heightAnchor.constraint(greaterThanOrEqualToConstant: 280),
+            columns.heightAnchor.constraint(greaterThanOrEqualToConstant: 360),
             footer.widthAnchor.constraint(equalTo: managerRoot.widthAnchor),
             permissionRoot.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             permissionRoot.centerYAnchor.constraint(equalTo: view.centerYAnchor),
@@ -145,6 +159,7 @@ final class MenuBarItemManagerViewController: NSViewController {
         table.identifier = NSUserInterfaceItemIdentifier(identifier)
         table.headerView = nil
         table.rowHeight = 32
+        table.intercellSpacing = NSSize(width: 0, height: 0)
         table.usesAlternatingRowBackgroundColors = true
         table.allowsMultipleSelection = false
         table.dataSource = self
@@ -179,7 +194,7 @@ final class MenuBarItemManagerViewController: NSViewController {
         NSLayoutConstraint.activate([
             header.widthAnchor.constraint(equalTo: stack.widthAnchor),
             scroll.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 260)
+            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 320)
         ])
         return stack
     }
@@ -300,9 +315,15 @@ final class MenuBarItemManagerViewController: NSViewController {
         visibleTable.reloadData()
         hiddenCountLabel.stringValue = "\(hiddenItems.count)"
         visibleCountLabel.stringValue = "\(visibleItems.count)"
-        statusLabel.stringValue = items.isEmpty
-            ? "No identifiable menu bar items were found.".localized
-            : "Drop an item to apply the real menu bar position.".localized
+        if let pinnedStatus {
+            statusLabel.stringValue = pinnedStatus
+            statusLabel.textColor = .systemRed
+        } else {
+            statusLabel.textColor = .secondaryLabelColor
+            statusLabel.stringValue = items.isEmpty
+                ? "No identifiable menu bar items were found.".localized
+                : "Drop an item to apply the real menu bar position.".localized
+        }
         isBusy = false
     }
 
@@ -340,7 +361,7 @@ final class MenuBarItemManagerViewController: NSViewController {
         visibleCountLabel.stringValue = "\(visibleItems.count)"
 
         guard let relation else {
-            statusLabel.stringValue = "Couldn't find a drop target in the menu bar.".localized
+            reportMoveFailure("Couldn't find a drop target in the menu bar.".localized)
             return
         }
 
@@ -351,18 +372,35 @@ final class MenuBarItemManagerViewController: NSViewController {
             self.isBusy = false
             switch result {
             case .moved, .alreadyThere:
+                self.clearPinnedStatus()
                 self.statusLabel.stringValue = "Drop an item to apply the real menu bar position.".localized
             case .crossedNotch:
-                self.statusLabel.stringValue = "Couldn't move that item across the notch.".localized
+                self.reportMoveFailure("Couldn't move that item across the notch.".localized)
                 self.refresh(reuseLayout: true)
             case .full:
-                self.statusLabel.stringValue = "The right side of the menu bar is full.".localized
+                self.reportMoveFailure("The right side of the menu bar is full.".localized)
                 self.refresh(reuseLayout: true)
             case .missingWindows, .timedOut:
-                self.statusLabel.stringValue = "Couldn't move that item. Try again after refreshing.".localized
+                self.reportMoveFailure("Couldn't place that item. It was moved back.".localized)
                 self.refresh(reuseLayout: true)
             }
         }
+    }
+
+    private func reportMoveFailure(_ message: String) {
+        pinnedStatus = message
+        statusLabel.stringValue = message
+        statusLabel.textColor = .systemRed
+        guard let window = view.window else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = message
+        alert.beginSheetModal(for: window)
+    }
+
+    private func clearPinnedStatus() {
+        pinnedStatus = nil
+        statusLabel.textColor = .secondaryLabelColor
     }
 }
 
