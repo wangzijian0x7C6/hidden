@@ -176,6 +176,20 @@ enum MenuBarItemMover {
         defer {
             if let cursor { CGWarpMouseCursorPosition(cursor) }
         }
+        let first = performMove(item, relation: relation)
+        if first != .crossedNotch {
+            return first
+        }
+        guard let controller = (NSApp.delegate as? AppDelegate)?.statusBarController else {
+            return first
+        }
+        logMove("retry after clearing our own status items")
+        return controller.withRoomForNotchCrossing {
+            performMove(item, relation: relation)
+        }
+    }
+
+    private static func performMove(_ item: ManagedMenuBarItem, relation: NativeMenuBarRelation) -> MoveResult {
         var crossedNotch = false
         for attempt in 1...3 {
             guard
@@ -192,6 +206,10 @@ enum MenuBarItemMover {
             if satisfies(sourceRect, relation: relation, targetRect: targetRect) {
                 logMove("already in place")
                 return .alreadyThere
+            }
+            if crosses {
+                logMove("skip drag that would cross the notch")
+                continue
             }
             let points = movePoints(sourceRect: sourceRect, targetRect: targetRect, relation: relation)
             postMove(

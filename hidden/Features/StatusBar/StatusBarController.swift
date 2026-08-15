@@ -293,6 +293,25 @@ class StatusBarController {
         }
     }
 
+    func withRoomForNotchCrossing<T>(_ work: () -> T) -> T {
+        let separate = btnSeparate.length
+        let expand = btnExpandCollapse.length
+        let always = btnAlwaysHidden?.length
+        btnSeparate.length = 1
+        btnExpandCollapse.length = 1
+        btnAlwaysHidden?.length = 0
+        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.25))
+        defer {
+            btnSeparate.length = separate
+            btnExpandCollapse.length = expand
+            if let always {
+                btnAlwaysHidden?.length = always
+            }
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.08))
+        }
+        return work()
+    }
+
     func prepareForItemManagement(completion: @escaping (MenuBarManagementLayout) -> Void) {
         let deliver: () -> Void = { [weak self] in
             guard
