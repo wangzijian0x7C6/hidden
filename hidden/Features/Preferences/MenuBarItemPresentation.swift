@@ -66,6 +66,44 @@ enum MenuBarItemPresentation {
         isGenericSystemName(appName) || appName == "SystemUIServer" || appName == "Control Centre"
     }
 
+    static func owningAppName(scannedAppName: String, bundleAppName: String?) -> String {
+        if let bundleAppName, !isSystemExtraOwner(bundleAppName) {
+            return bundleAppName
+        }
+        return scannedAppName
+    }
+
+    static func resolvedSourceName(
+        ownerName: String,
+        extraSourceName: String?,
+        hint: String?,
+        knownApps: [String: String]
+    ) -> String {
+        if let extraSourceName, !isSystemExtraOwner(extraSourceName) {
+            return extraSourceName
+        }
+        if let name = localizedName(forHint: hint, knownApps: knownApps), !isSystemExtraOwner(name) {
+            return name
+        }
+        return extraSourceName ?? ownerName
+    }
+
+    static func localizedName(forHint hint: String?, knownApps: [String: String]) -> String? {
+        guard let hint = hint?.trimmingCharacters(in: .whitespacesAndNewlines), !hint.isEmpty else {
+            return nil
+        }
+        if let exact = knownApps[hint] {
+            return exact
+        }
+        if hint.contains(".") {
+            return knownApps
+                .filter { hint.hasPrefix($0.key + ".") || $0.key.hasPrefix(hint + ".") }
+                .max { $0.key.count < $1.key.count }?
+                .value
+        }
+        return knownApps.first { $0.value == hint }?.value
+    }
+
     static func axName(title: String?, description: String?, identifier: String? = nil) -> String? {
         let titleName = cleaned(title).map(shortName)
         let descriptionName = cleaned(description).map(shortName)
@@ -243,7 +281,7 @@ enum MenuBarItemPresentation {
     static func matchedExtras(
         itemMidXs: [CGFloat],
         extras: [(title: String?, x: CGFloat, width: CGFloat, sourceAppName: String, sourcePID: pid_t)],
-        threshold: CGFloat = 12
+        threshold: CGFloat = 36
     ) -> [ExtraSource?] {
         var result = [ExtraSource?](repeating: nil, count: itemMidXs.count)
         var usedItems = Set<Int>()
@@ -255,10 +293,11 @@ enum MenuBarItemPresentation {
                 let isThirdParty = !isSystemExtraOwner(extra.sourceAppName)
                 guard isThirdParty == thirdPartyOnly else { continue }
                 let extraMid = extra.x + extra.width / 2
+                let limit = max(threshold, extra.width)
                 let nearest = itemMidXs.enumerated()
                     .filter { !usedItems.contains($0.offset) }
                     .min { abs($0.element - extraMid) < abs($1.element - extraMid) }
-                guard let nearest, abs(nearest.element - extraMid) <= threshold else { continue }
+                guard let nearest, abs(nearest.element - extraMid) <= limit else { continue }
                 usedItems.insert(nearest.offset)
                 usedExtras.insert(extraIndex)
                 result[nearest.offset] = ExtraSource(
@@ -271,6 +310,22 @@ enum MenuBarItemPresentation {
 
         assign(thirdPartyOnly: true)
         assign(thirdPartyOnly: false)
+
+        for (extraIndex, extra) in extras.enumerated() {
+            guard !usedExtras.contains(extraIndex), !isSystemExtraOwner(extra.sourceAppName) else { continue }
+            let extraMid = extra.x + extra.width / 2
+            let nearest = itemMidXs.enumerated()
+                .filter { !usedItems.contains($0.offset) }
+                .min { abs($0.element - extraMid) < abs($1.element - extraMid) }
+            guard let nearest else { continue }
+            usedItems.insert(nearest.offset)
+            usedExtras.insert(extraIndex)
+            result[nearest.offset] = ExtraSource(
+                title: specificName(extra.title),
+                sourceAppName: extra.sourceAppName,
+                sourcePID: extra.sourcePID
+            )
+        }
         return result
     }
 }

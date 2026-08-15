@@ -220,4 +220,79 @@ final class MenuBarItemPresentationTests: XCTestCase {
         XCTAssertEqual(matches[1]?.sourceAppName, "Control Center")
         XCTAssertEqual(matches[1]?.title, "Wi-Fi")
     }
+
+    func testBundleIdentifierOnControlCenterExtraUsesTheRealApp() {
+        XCTAssertEqual(
+            MenuBarItemPresentation.owningAppName(scannedAppName: "控制中心", bundleAppName: "ChatGPT"),
+            "ChatGPT"
+        )
+        XCTAssertEqual(
+            MenuBarItemPresentation.owningAppName(scannedAppName: "控制中心", bundleAppName: nil),
+            "控制中心"
+        )
+    }
+
+    func testMatchesThirdPartyWhenCentersAreAFewPixelsOff() {
+        let matches = MenuBarItemPresentation.matchedExtras(
+            itemMidXs: [100],
+            extras: [
+                (title: nil, x: 70, width: 20, sourceAppName: "微信", sourcePID: 3)
+            ]
+        )
+        XCTAssertEqual(matches[0]?.sourceAppName, "微信")
+    }
+
+    func testAssignsThirdPartyEvenWhenFarFromWindow() {
+        let matches = MenuBarItemPresentation.matchedExtras(
+            itemMidXs: [100],
+            extras: [
+                (title: nil, x: 10, width: 20, sourceAppName: "微信", sourcePID: 3)
+            ]
+        )
+        XCTAssertEqual(matches[0]?.sourceAppName, "微信")
+    }
+
+    func testResolvesBundleIDHintToRealApp() {
+        let known = [
+            "com.openai.chat": "ChatGPT",
+            "com.tencent.xinWeChat": "微信",
+            "com.apple.controlcenter": "控制中心"
+        ]
+        XCTAssertEqual(
+            MenuBarItemPresentation.resolvedSourceName(
+                ownerName: "控制中心",
+                extraSourceName: "控制中心",
+                hint: "com.openai.chat",
+                knownApps: known
+            ),
+            "ChatGPT"
+        )
+        XCTAssertEqual(
+            MenuBarItemPresentation.resolvedSourceName(
+                ownerName: "控制中心",
+                extraSourceName: "控制中心",
+                hint: "com.tencent.xinWeChat.status",
+                knownApps: known
+            ),
+            "微信"
+        )
+        XCTAssertEqual(
+            MenuBarItemPresentation.resolvedSourceName(
+                ownerName: "控制中心",
+                extraSourceName: "控制中心",
+                hint: "com.apple.controlcenter.WiFi",
+                knownApps: known
+            ),
+            "控制中心"
+        )
+        XCTAssertEqual(
+            MenuBarItemPresentation.resolvedSourceName(
+                ownerName: "控制中心",
+                extraSourceName: "微信",
+                hint: "com.openai.chat",
+                knownApps: known
+            ),
+            "微信"
+        )
+    }
 }
