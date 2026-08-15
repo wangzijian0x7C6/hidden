@@ -165,6 +165,7 @@ enum MenuBarItemMover {
         case alreadyThere
         case missingWindows
         case crossedNotch
+        case full
         case timedOut
     }
 
@@ -181,6 +182,10 @@ enum MenuBarItemMover {
             return .alreadyThere
         }
         if crossesNotch(sourceRect, targetRect, notch: notchFrame()) {
+            if isTrailingFull(for: sourceRect.width) || hasNotchClippedExtra() {
+                logMove("trailing side is full width=\(sourceRect.width)")
+                return .full
+            }
             guard let controller = (NSApp.delegate as? AppDelegate)?.statusBarController else {
                 return .crossedNotch
             }
@@ -231,6 +236,10 @@ enum MenuBarItemMover {
             let updated = waitForMove(windowNumber: item.windowNumber, from: sourceRect)
             logMove("after drag rect=\(String(describing: updated))")
             if let updated, satisfies(updated, relation: relation, targetRect: currentRect(windowNumber: relation.targetWindowNumber) ?? targetRect) {
+                if hasNotchClippedExtra() {
+                    logMove("move landed but an extra is clipped by the notch")
+                    return .full
+                }
                 logMove("moved")
                 return .moved
             }
@@ -249,6 +258,43 @@ enum MenuBarItemMover {
             return nil
         }
         return CGRect(x: left.maxX, y: 0, width: max(right.minX - left.maxX, 0), height: screen.frame.height)
+    }
+
+    private static func isTrailingFull(for itemWidth: CGFloat) -> Bool {
+        guard
+            let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }),
+            let right = screen.auxiliaryTopRightArea,
+            let notch = notchFrame()
+        else {
+            return false
+        }
+        let rightItems = menuBarWindows().compactMap { info -> CGRect? in
+            guard
+                let bounds = info[kCGWindowBounds as String] as? [String: Any],
+                let rect = rect(from: bounds),
+                rect.midX >= notch.maxX
+            else { return nil }
+            return rect
+        }
+        guard let leftmost = rightItems.min(by: { $0.minX < $1.minX }) else {
+            return false
+        }
+        return !MenuBarItemPresentation.trailingHasRoom(
+            usableMinX: right.minX,
+            leftmostItemMinX: leftmost.minX,
+            itemWidth: itemWidth
+        )
+    }
+
+    private static func hasNotchClippedExtra() -> Bool {
+        guard let notch = notchFrame() else { return false }
+        return menuBarWindows().contains { info in
+            guard
+                let bounds = info[kCGWindowBounds as String] as? [String: Any],
+                let rect = rect(from: bounds)
+            else { return false }
+            return MenuBarItemPresentation.intersectsNotch(rect, notch: notch)
+        }
     }
 
     private static func crossesNotch(_ source: CGRect, _ target: CGRect, notch: CGRect?) -> Bool {

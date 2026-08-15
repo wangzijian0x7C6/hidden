@@ -187,6 +187,15 @@ enum MenuBarItemPresentation {
         itemMidX < separatorMidX ? .hidden : .visible
     }
 
+    static func trailingHasRoom(usableMinX: CGFloat, leftmostItemMinX: CGFloat, itemWidth: CGFloat) -> Bool {
+        leftmostItemMinX - usableMinX >= itemWidth + 2
+    }
+
+    static func intersectsNotch(_ rect: CGRect, notch: CGRect) -> Bool {
+        guard notch.width > 0, rect.width > 0 else { return false }
+        return rect.maxX > notch.minX + 1 && rect.minX < notch.maxX - 1
+    }
+
     static func accessibilityPidsToScan(extraPids: [pid_t], runningPids: [pid_t] = [], trusted: Bool) -> [pid_t] {
         guard trusted else { return [] }
         return Array(Set(extraPids + runningPids)).sorted()

@@ -31,6 +31,7 @@
 "Moving %@…" = "正在移動 %@…";
 "Couldn't move that item. Try again after refreshing." = "無法移動該圖示，請重新整理後再試。";
 "Couldn't move that item across the notch." = "無法把該圖示拖過劉海。";
+"The right side of the menu bar is full." = "選單列右側已滿，請先隱藏一些圖示。";
 "Sound" = "聲音";
 "Now Playing" = "正在播放";
 "Wi-Fi" = "Wi-Fi";

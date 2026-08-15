@@ -272,6 +272,9 @@ final class MenuBarItemManagerViewController: NSViewController {
             case .crossedNotch:
                 self.statusLabel.stringValue = "Couldn't move that item across the notch.".localized
                 self.refresh(reuseLayout: true)
+            case .full:
+                self.statusLabel.stringValue = "The right side of the menu bar is full.".localized
+                self.refresh(reuseLayout: true)
             case .missingWindows, .timedOut:
                 self.statusLabel.stringValue = "Couldn't move that item. Try again after refreshing.".localized
                 self.refresh(reuseLayout: true)

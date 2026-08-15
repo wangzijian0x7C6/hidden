@@ -196,6 +196,18 @@ final class MenuBarItemPresentationTests: XCTestCase {
         XCTAssertEqual(titles.compactMap { $0 }.first, "Wi-Fi")
     }
 
+    func testTrailingRoomRejectsWhenFlushToTheNotch() {
+        XCTAssertFalse(MenuBarItemPresentation.trailingHasRoom(usableMinX: 800, leftmostItemMinX: 802, itemWidth: 37))
+        XCTAssertTrue(MenuBarItemPresentation.trailingHasRoom(usableMinX: 800, leftmostItemMinX: 860, itemWidth: 37))
+    }
+
+    func testNotchIntersectionDetectsHalfClippedIcons() {
+        let notch = CGRect(x: 642, y: 0, width: 156, height: 32)
+        XCTAssertTrue(MenuBarItemPresentation.intersectsNotch(CGRect(x: 620, y: 0, width: 37, height: 29), notch: notch))
+        XCTAssertFalse(MenuBarItemPresentation.intersectsNotch(CGRect(x: 580, y: 0, width: 37, height: 29), notch: notch))
+        XCTAssertFalse(MenuBarItemPresentation.intersectsNotch(CGRect(x: 820, y: 0, width: 37, height: 29), notch: notch))
+    }
+
     func testSectionSplitsOnSeparator() {
         XCTAssertEqual(MenuBarItemPresentation.section(itemMidX: 700, separatorMidX: 798), .hidden)
         XCTAssertEqual(MenuBarItemPresentation.section(itemMidX: 900, separatorMidX: 798), .visible)

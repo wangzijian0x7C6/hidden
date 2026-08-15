@@ -31,6 +31,7 @@
 "Moving %@…" = "Moving %@…";
 "Couldn't move that item. Try again after refreshing." = "Couldn't move that item. Try again after refreshing.";
 "Couldn't move that item across the notch." = "Couldn't move that item across the notch.";
+"The right side of the menu bar is full." = "The right side of the menu bar is full. Hide an item first.";
 "Sound" = "Sound";
 "Now Playing" = "Now Playing";
 "Wi-Fi" = "Wi-Fi";
