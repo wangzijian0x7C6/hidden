@@ -24,6 +24,7 @@ class StatusBarController {
     
     private var btnAlwaysHiddenLength: CGFloat = Preferences.alwaysHiddenSectionEnabled ? 20 : 0
     private var btnAlwaysHiddenEnableExpandCollapseLength: CGFloat = Preferences.alwaysHiddenSectionEnabled ? 2000 : 0
+    private var managementChrome: (separate: CGFloat, expand: CGFloat, always: CGFloat?)?
     
     private let imgIconLine = NSImage(named:NSImage.Name("ic_line"))
     
@@ -302,12 +303,17 @@ class StatusBarController {
     }
 
     func withRoomForNotchCrossing<T>(until ready: () -> Bool, _ work: () -> T) -> T {
+        if managementChrome != nil {
+            let deadline = Date().addingTimeInterval(0.16)
+            while Date() < deadline, !ready() {
+                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.016))
+            }
+            return work()
+        }
         let separate = btnSeparate.length
         let expand = btnExpandCollapse.length
         let always = btnAlwaysHidden?.length
-        btnSeparate.length = 1
-        btnExpandCollapse.length = 0
-        btnAlwaysHidden?.length = 0
+        collapseManagementChrome()
         let deadline = Date().addingTimeInterval(0.16)
         while Date() < deadline, !ready() {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.016))
@@ -322,23 +328,44 @@ class StatusBarController {
         return work()
     }
 
+    func beginItemManagementChrome() {
+        guard managementChrome == nil else { return }
+        managementChrome = (btnSeparate.length, btnExpandCollapse.length, btnAlwaysHidden?.length)
+        collapseManagementChrome()
+    }
+
+    func endItemManagementChrome() {
+        guard let saved = managementChrome else { return }
+        btnSeparate.length = saved.separate
+        btnExpandCollapse.length = saved.expand
+        if let always = saved.always {
+            btnAlwaysHidden?.length = always
+        }
+        managementChrome = nil
+    }
+
+    private func collapseManagementChrome() {
+        btnSeparate.length = 1
+        btnExpandCollapse.length = 0
+        btnAlwaysHidden?.length = 0
+    }
+
     func prepareForItemManagement(completion: @escaping (MenuBarManagementLayout) -> Void) {
-        let deliver: () -> Void = { [weak self] in
+        if isCollapsed {
+            expandMenubar()
+        }
+        beginItemManagementChrome()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             guard
                 let self,
                 let separatorFrame = self.btnSeparate.button?.window?.frame,
                 let expandCollapseFrame = self.btnExpandCollapse.button?.window?.frame
             else { return }
+            MenuBarItemMover.unclipExtras()
             completion(MenuBarManagementLayout(
                 separatorFrame: separatorFrame,
                 expandCollapseFrame: expandCollapseFrame
             ))
-        }
-        if isCollapsed {
-            expandMenubar()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: deliver)
-        } else {
-            deliver()
         }
     }
     

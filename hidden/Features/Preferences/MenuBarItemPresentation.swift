@@ -191,6 +191,34 @@ enum MenuBarItemPresentation {
         leftmostItemMinX - usableMinX >= itemWidth + 2
     }
 
+    static func isMovingOntoTrailingSide(sourceMidX: CGFloat, targetMidX: CGFloat, notch: CGRect?) -> Bool {
+        guard let notch, notch.width > 0 else { return false }
+        return sourceMidX < notch.minX && targetMidX > notch.maxX
+    }
+
+    static func shouldBlockAsTrailingFull(
+        sourceMidX: CGFloat,
+        targetMidX: CGFloat,
+        notch: CGRect?,
+        trailingIsFull: Bool
+    ) -> Bool {
+        trailingIsFull && isMovingOntoTrailingSide(sourceMidX: sourceMidX, targetMidX: targetMidX, notch: notch)
+    }
+
+    static func leftmostTrailingMinX(frames: [CGRect], notch: CGRect) -> CGFloat? {
+        frames
+            .filter { $0.minX >= notch.maxX - 1 }
+            .map(\.minX)
+            .min()
+    }
+
+    static func unclipMinX(_ rect: CGRect, notch: CGRect) -> CGFloat? {
+        guard intersectsNotch(rect, notch: notch) else { return nil }
+        let leftVisible = max(0, min(rect.maxX, notch.minX) - rect.minX)
+        let rightVisible = max(0, rect.maxX - max(rect.minX, notch.maxX))
+        return leftVisible >= rightVisible ? notch.minX - rect.width : notch.maxX
+    }
+
     static func intersectsNotch(_ rect: CGRect, notch: CGRect) -> Bool {
         guard notch.width > 0, rect.width > 0 else { return false }
         return rect.maxX > notch.minX + 1 && rect.minX < notch.maxX - 1

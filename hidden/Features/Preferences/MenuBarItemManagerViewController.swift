@@ -68,6 +68,7 @@ final class MenuBarItemManagerViewController: NSViewController {
         autoRefreshTimer = nil
         NotificationCenter.default.removeObserver(self, name: NSApplication.didBecomeActiveNotification, object: nil)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
+        (NSApp.delegate as? AppDelegate)?.statusBarController.endItemManagementChrome()
     }
 
     private func resizeWindowToFit() {

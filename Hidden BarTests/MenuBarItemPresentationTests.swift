@@ -201,6 +201,68 @@ final class MenuBarItemPresentationTests: XCTestCase {
         XCTAssertTrue(MenuBarItemPresentation.trailingHasRoom(usableMinX: 800, leftmostItemMinX: 860, itemWidth: 37))
     }
 
+    func testHidingAcrossTheNotchIsNeverTrailingFull() {
+        let notch = CGRect(x: 642, y: 0, width: 156, height: 32)
+        XCTAssertFalse(
+            MenuBarItemPresentation.shouldBlockAsTrailingFull(
+                sourceMidX: 1040,
+                targetMidX: 600,
+                notch: notch,
+                trailingIsFull: true
+            )
+        )
+    }
+
+    func testShowingAcrossTheNotchBlocksOnlyWhenTrailingIsFull() {
+        let notch = CGRect(x: 642, y: 0, width: 156, height: 32)
+        XCTAssertTrue(
+            MenuBarItemPresentation.shouldBlockAsTrailingFull(
+                sourceMidX: 600,
+                targetMidX: 1040,
+                notch: notch,
+                trailingIsFull: true
+            )
+        )
+        XCTAssertFalse(
+            MenuBarItemPresentation.shouldBlockAsTrailingFull(
+                sourceMidX: 600,
+                targetMidX: 1040,
+                notch: notch,
+                trailingIsFull: false
+            )
+        )
+    }
+
+    func testLeftmostTrailingItemIgnoresNotchOverlap() {
+        let notch = CGRect(x: 642, y: 0, width: 156, height: 32)
+        XCTAssertEqual(
+            MenuBarItemPresentation.leftmostTrailingMinX(
+                frames: [
+                    CGRect(x: 790, y: 0, width: 30, height: 29),
+                    CGRect(x: 820, y: 0, width: 24, height: 29),
+                    CGRect(x: 580, y: 0, width: 28, height: 29)
+                ],
+                notch: notch
+            ),
+            820
+        )
+    }
+
+    func testUnclipPushesHalfIconFullyOffTheNotch() {
+        let notch = CGRect(x: 642, y: 0, width: 156, height: 32)
+        XCTAssertEqual(
+            MenuBarItemPresentation.unclipMinX(CGRect(x: 620, y: 0, width: 37, height: 29), notch: notch),
+            605
+        )
+        XCTAssertEqual(
+            MenuBarItemPresentation.unclipMinX(CGRect(x: 790, y: 0, width: 30, height: 29), notch: notch),
+            798
+        )
+        XCTAssertNil(
+            MenuBarItemPresentation.unclipMinX(CGRect(x: 580, y: 0, width: 37, height: 29), notch: notch)
+        )
+    }
+
     func testWedgeDetectsIconStuckBetweenSeparatorAndChevron() {
         let separator = CGRect(x: 900, y: 0, width: 8, height: 29)
         let expand = CGRect(x: 910, y: 0, width: 18, height: 29)
